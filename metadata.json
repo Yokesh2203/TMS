@@ -1,0 +1,6 @@
+{
+  "name": "Student Transport Data Management",
+  "description": "A modern, responsive student data management dashboard for schools and colleges with dynamic route and stopping selection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
