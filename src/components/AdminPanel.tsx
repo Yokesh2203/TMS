@@ -122,23 +122,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return list;
   }, [filteredStudents, sortOrder]);
 
-  // Department-Isolated Gap Analysis (all students, unfiltered by year/search)
+  // Filter students by Year of Study so gap analysis and counts strictly respect the selected Year!
+  const yearFilteredStudents = useMemo(() => {
+    if (selectedYear === 'ALL') return students;
+    return students.filter((s) => s.yearOrSection === selectedYear);
+  }, [students, selectedYear]);
+
+  // Department-Isolated Gap Analysis (strictly filtered by selectedYear!)
   const departmentGapAnalysis = useMemo(() => {
-    const records = students.map((s) => ({
+    const records = yearFilteredStudents.map((s) => ({
       identifier: s.identifier,
       departmentOrClass: s.departmentOrClass || 'General',
     }));
     return detectDepartmentGaps(records);
-  }, [students]);
+  }, [yearFilteredStudents]);
 
-  // Single Department Gap Result (only when a specific dept is selected)
+  // Single Department Gap Result (strictly filtered by selectedDept AND selectedYear!)
   const singleDeptGapResult = useMemo(() => {
     if (selectedDept === 'ALL') return null;
-    const ids = students
+    const ids = yearFilteredStudents
       .filter((s) => s.departmentOrClass === selectedDept)
       .map((s) => s.identifier);
     return detectRegisterNumberGaps(ids);
-  }, [students, selectedDept]);
+  }, [yearFilteredStudents, selectedDept]);
 
   // Total missing count for the KPI card
   const totalMissingCount = useMemo(() => {
@@ -317,6 +323,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="text-2xl font-extrabold text-slate-900 font-mono">{filteredStudents.length}</div>
           <p className="text-[11px] text-slate-500 mt-1">
             {selectedDept === 'ALL' ? 'All departments' : selectedDept}
+            {selectedYear !== 'ALL' && ` • ${selectedYear}`}
           </p>
         </div>
 
@@ -355,7 +362,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
           <div className="text-2xl font-extrabold font-mono">{totalMissingCount}</div>
           <p className="text-[11px] opacity-80 mt-1">
-            {totalMissingCount > 0 ? 'Gaps detected — per department series only' : 'Continuous sequence — no gaps found'}
+            {totalMissingCount > 0 
+              ? `Gaps detected ${selectedYear !== 'ALL' ? `in ${selectedYear}` : '— per department series'}`
+              : yearFilteredStudents.length === 0
+              ? `No submissions recorded ${selectedYear !== 'ALL' ? `for ${selectedYear}` : 'yet'}`
+              : `Continuous sequence ${selectedYear !== 'ALL' ? `for ${selectedYear}` : ''} — no gaps found`}
           </p>
         </div>
       </div>
@@ -801,12 +812,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             )}
 
-            {departmentGapAnalysis.totalMissingCount === 0 && students.length > 0 && (
+            {departmentGapAnalysis.totalMissingCount === 0 && yearFilteredStudents.length > 0 && (
               <div className="flex items-center gap-3 bg-emerald-50/70 border border-emerald-200 p-4 rounded-2xl text-emerald-900">
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
                 <div className="text-xs">
                   <span className="font-bold">Zero Missing Register Numbers: </span>
-                  All submitted series across all departments are completely continuous!
+                  All submitted series {selectedYear !== 'ALL' ? `for ${selectedYear}` : 'across all departments'} are completely continuous!
                 </div>
               </div>
             )}
