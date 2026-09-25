@@ -16,6 +16,7 @@ import {
   Search,
   X,
   Navigation,
+  Loader2,
 } from 'lucide-react';
 import {
   Student,
@@ -28,6 +29,7 @@ import {
   COLLEGE_YEARS,
 } from '../data/mockData';
 import { Toast, ToastData } from './Toast';
+import { checkIdentifierAvailability } from '../services/api';
 
 interface StudentFormProps {
   onSaveStudent: (student: Omit<Student, 'id' | 'createdAt' | 'updatedAt'>) => Promise<any> | any;
@@ -54,6 +56,59 @@ export const StudentForm: React.FC<StudentFormProps> = ({
   const [lastSavedStudent, setLastSavedStudent] = useState<Student | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<ToastData | null>(null);
+
+  // Live Register Number check state
+  const [regCheckStatus, setRegCheckStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const [regCheckInfo, setRegCheckInfo] = useState<{
+    message?: string;
+    studentName?: string;
+    busRouteName?: string;
+    stoppingName?: string;
+  } | null>(null);
+
+  // Real-time live check as the student fills the Register Number input box
+  useEffect(() => {
+    const clean = formData.identifier.trim();
+    if (clean.length < 5) {
+      setRegCheckStatus('idle');
+      setRegCheckInfo(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setRegCheckStatus('checking');
+      try {
+        const res = await checkIdentifierAvailability(clean);
+        if (res.exists) {
+          setRegCheckStatus('taken');
+          setRegCheckInfo({
+            message: res.message,
+            studentName: res.studentName,
+            busRouteName: res.busRouteName,
+            stoppingName: res.stoppingName,
+          });
+          setErrors((prev) => ({
+            ...prev,
+            identifier: `Already registered for ${res.studentName || 'another student'}.`,
+          }));
+        } else {
+          setRegCheckStatus('available');
+          setRegCheckInfo(null);
+          setErrors((prev) => {
+            const next = { ...prev };
+            if (next.identifier && (next.identifier.includes('Already registered') || next.identifier.includes('required'))) {
+              delete next.identifier;
+            }
+            return next;
+          });
+        }
+      } catch {
+        setRegCheckStatus('idle');
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [formData.identifier]);
 
   // Search input state for quick Stop / Route lookup
   const [stopSearchQuery, setStopSearchQuery] = useState('');
@@ -375,12 +430,23 @@ export const StudentForm: React.FC<StudentFormProps> = ({
         busRouteId: '',
         stoppingName: '',
       });
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error('Registration submission error:', err);
+      const isDuplicate = 
+        err?.message?.toLowerCase()?.includes('already registered') ||
+        err?.message?.toLowerCase()?.includes('multiple submissions');
+
+      if (isDuplicate) {
+        setErrors((prev) => ({
+          ...prev,
+          identifier: err.message || 'This Register Number is already registered.',
+        }));
+      }
+
       setToast({
         id: `toast-err-${Date.now()}`,
-        title: 'Database Error',
-        message: 'Could not submit student registration.',
+        title: isDuplicate ? '⚠️ Register Number Already Registered' : 'Registration Failed',
+        message: err?.message || 'Could not submit student registration.',
         type: 'error',
       });
     } finally {
@@ -507,12 +573,32 @@ export const StudentForm: React.FC<StudentFormProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Register Number */}
               <div>
-                <label
-                  htmlFor="register-number-input"
-                  className="block text-xs font-medium text-slate-700 mb-1"
-                >
-                  Register Number <span className="text-rose-500">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label
+                    htmlFor="register-number-input"
+                    className="block text-xs font-medium text-slate-700"
+                  >
+                    Register Number <span className="text-rose-500">*</span>
+                  </label>
+                  {regCheckStatus === 'checking' && (
+                    <span className="text-[11px] text-indigo-600 font-medium flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin text-indigo-500" />
+                      <span>Checking...</span>
+                    </span>
+                  )}
+                  {regCheckStatus === 'available' && (
+                    <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                      <span>Available</span>
+                    </span>
+                  )}
+                  {regCheckStatus === 'taken' && (
+                    <span className="text-[11px] text-rose-600 font-bold flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3 text-rose-500" />
+                      <span>Already Registered</span>
+                    </span>
+                  )}
+                </div>
                 <div className="relative">
                   <input
                     type="text"
@@ -521,17 +607,41 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                     maxLength={15}
                     value={formData.identifier}
                     onChange={(e) => handleInputChange('identifier', e.target.value.trim())}
-                    className={`w-full pl-9 pr-3.5 py-2.5 text-sm bg-white border font-mono rounded-xl focus:outline-none focus:ring-2 transition-all ${
-                      errors.identifier
-                        ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-200 text-rose-900'
+                    className={`w-full pl-9 pr-9 py-2.5 text-sm bg-white border font-mono rounded-xl focus:outline-none focus:ring-2 transition-all ${
+                      regCheckStatus === 'taken' || errors.identifier
+                        ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-200 text-rose-900 bg-rose-50/20'
+                        : regCheckStatus === 'available'
+                        ? 'border-emerald-300 focus:border-emerald-500 focus:ring-emerald-100 text-slate-900 bg-emerald-50/10'
                         : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-100 text-slate-900'
                     }`}
                   />
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                     <Hash className="h-4 w-4" />
                   </div>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                    {regCheckStatus === 'checking' && (
+                      <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+                    )}
+                    {regCheckStatus === 'available' && (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    )}
+                    {regCheckStatus === 'taken' && (
+                      <AlertCircle className="h-4 w-4 text-rose-500" />
+                    )}
+                  </div>
                 </div>
-                {errors.identifier ? (
+
+                {regCheckStatus === 'taken' && regCheckInfo ? (
+                  <div className="mt-1.5 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 space-y-1 animate-in fade-in duration-200 shadow-xs">
+                    <p className="font-bold flex items-center gap-1.5 text-rose-950">
+                      <AlertCircle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                      <span>This Register Number is already saved!</span>
+                    </p>
+                    <p className="text-[11px] text-rose-700 pl-5">
+                      Enrolled: <strong>{regCheckInfo.studentName}</strong> • {regCheckInfo.busRouteName || 'Assigned Route'} • Stop: <strong>{regCheckInfo.stoppingName}</strong>
+                    </p>
+                  </div>
+                ) : errors.identifier ? (
                   <p className="mt-1 text-xs text-rose-600 flex items-center gap-1">
                     <AlertCircle className="h-3.5 w-3.5" />
                     {errors.identifier}
@@ -991,12 +1101,30 @@ export const StudentForm: React.FC<StudentFormProps> = ({
               <button
                 type="submit"
                 id="save-student-btn"
-                disabled={isSubmitting}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl font-semibold text-sm text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer disabled:opacity-50"
+                disabled={isSubmitting || regCheckStatus === 'taken' || regCheckStatus === 'checking'}
+                className={`flex-1 inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl font-semibold text-sm text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
+                  regCheckStatus === 'taken'
+                    ? 'bg-slate-400 cursor-not-allowed opacity-75'
+                    : 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 cursor-pointer disabled:opacity-50'
+                }`}
               >
-                <Database className="h-4 w-4 shrink-0" />
-                <span>Submit</span>
-                <ArrowRight className="h-3.5 w-3.5 ml-0.5 shrink-0" />
+                {regCheckStatus === 'checking' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                    <span>Checking Register No...</span>
+                  </>
+                ) : regCheckStatus === 'taken' ? (
+                  <>
+                    <AlertCircle className="h-4 w-4 shrink-0 text-white" />
+                    <span>Register Number Already Registered</span>
+                  </>
+                ) : (
+                  <>
+                    <Database className="h-4 w-4 shrink-0" />
+                    <span>Submit</span>
+                    <ArrowRight className="h-3.5 w-3.5 ml-0.5 shrink-0" />
+                  </>
+                )}
               </button>
 
               <button

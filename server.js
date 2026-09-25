@@ -122,6 +122,16 @@ async function initializeDatabase() {
       // Ignore if table routes is empty or not yet populated
     }
 
+    // Ensure UNIQUE index on identifier for O(1) / O(log N) instant lookup and strict duplicate prevention
+    try {
+      await db.query(`ALTER TABLE \`students\` ADD UNIQUE KEY \`uk_identifier\` (\`identifier\`)`);
+      console.log('✅ Added UNIQUE index `uk_identifier` on students table.');
+    } catch (idxErr) {
+      if (!idxErr.message?.includes('Duplicate key name') && !idxErr.message?.includes('already exists')) {
+        console.warn('Index note on students.identifier:', idxErr.message);
+      }
+    }
+
     // Create admins table if not exists to store admin credentials securely in database
     await db.query(`
       CREATE TABLE IF NOT EXISTS \`admins\` (
@@ -209,6 +219,44 @@ app.get('/api/students', async (req, res) => {
   }
 });
 
+// 2.5 Quick Live Register Number Availability Check (Instant O(1) B-tree lookup)
+app.get('/api/students/check/:identifier', async (req, res) => {
+  try {
+    const identifier = (req.params.identifier || '').trim();
+    if (!identifier) {
+      return res.json({ exists: false });
+    }
+
+    const db = getPool();
+    const [rows] = await db.query(
+      `SELECT id, student_name, stopping_name, bus_route_name 
+       FROM students 
+       WHERE identifier = ? 
+       LIMIT 1`,
+      [identifier]
+    );
+
+    if (rows && rows.length > 0) {
+      const match = rows[0];
+      return res.json({
+        exists: true,
+        studentName: match.student_name,
+        stoppingName: match.stopping_name,
+        busRouteName: match.bus_route_name,
+        message: `Already registered for "${match.student_name}" (${match.bus_route_name || 'Assigned Route'}, Stop: ${match.stopping_name})`,
+      });
+    }
+
+    return res.json({
+      exists: false,
+      message: 'Register Number available',
+    });
+  } catch (error) {
+    console.error('Error checking register number availability:', error);
+    res.status(500).json({ exists: false, error: error.message });
+  }
+});
+
 // 3. Insert a student record directly into MySQL
 app.post('/api/students', async (req, res) => {
   try {
@@ -230,7 +278,22 @@ app.post('/api/students', async (req, res) => {
       });
     }
 
+    const cleanIdentifier = identifier.trim();
     const db = getPool();
+
+    // Check if Register Number is already registered in MySQL
+    const [existing] = await db.query(
+      'SELECT id, student_name, stopping_name, bus_route_name FROM students WHERE identifier = ? LIMIT 1',
+      [cleanIdentifier]
+    );
+
+    if (existing && existing.length > 0) {
+      const prev = existing[0];
+      return res.status(409).json({
+        success: false,
+        error: `Register Number "${cleanIdentifier}" is already registered for "${prev.student_name}" (Route: ${prev.bus_route_name || 'Assigned Route'}, Stop: ${prev.stopping_name}). Multiple submissions with the same Register Number are not allowed.`,
+      });
+    }
 
     // If busRouteName not sent from frontend, look it up from routes table
     let routeName = busRouteName ? busRouteName.trim() : '';
@@ -252,7 +315,7 @@ app.post('/api/students', async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         studentName.trim(),
-        identifier.trim(),
+        cleanIdentifier,
         parseInt(institutionId, 10),
         departmentOrClass ? departmentOrClass.trim() : '',
         yearOrSection ? yearOrSection.trim() : '',
@@ -287,7 +350,7 @@ app.post('/api/students', async (req, res) => {
     const newStudent = rows[0] || {
       id: insertedId,
       studentName,
-      identifier,
+      identifier: cleanIdentifier,
       institutionId,
       departmentOrClass,
       yearOrSection,
@@ -297,9 +360,15 @@ app.post('/api/students', async (req, res) => {
       createdAt: new Date().toISOString(),
     };
 
-    console.log(`📥 Saved student "${studentName}" (${identifier}) → Route: ${routeName} | Stop: ${stoppingName}`);
+    console.log(`📥 Saved student "${studentName}" (${cleanIdentifier}) → Route: ${routeName} | Stop: ${stoppingName}`);
     res.status(201).json({ success: true, data: newStudent });
   } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) {
+      return res.status(409).json({
+        success: false,
+        error: `Register Number "${req.body?.identifier?.trim()}" is already registered in the system. Duplicate registrations are blocked.`,
+      });
+    }
     console.error('Error inserting student:', error);
     res.status(500).json({ success: false, error: error.message });
   }

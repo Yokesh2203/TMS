@@ -82,6 +82,57 @@ export async function fetchStudentsFromDb(): Promise<{ students: Student[]; sour
   return { students: [], source: 'local' };
 }
 
+// 2.5 Instant Live Register Number Availability Check (Instant O(1) B-Tree lookup)
+export async function checkIdentifierAvailability(identifier: string): Promise<{
+  exists: boolean;
+  studentName?: string;
+  busRouteName?: string;
+  stoppingName?: string;
+  message?: string;
+}> {
+  const clean = identifier.trim();
+  if (!clean) return { exists: false };
+
+  // 1. Check Backend Live Database (MySQL)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch(`${API_BASE}/api/students/check/${encodeURIComponent(clean)}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      return data;
+    }
+  } catch {
+    // Fallback to local storage check if backend is offline
+  }
+
+  // 2. Local Storage fallback check
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const list: Student[] = JSON.parse(saved);
+      const match = list.find((s) => s.identifier.trim().toLowerCase() === clean.toLowerCase());
+      if (match) {
+        return {
+          exists: true,
+          studentName: match.studentName,
+          busRouteName: match.busRouteName,
+          stoppingName: match.stoppingName,
+          message: `Already registered for "${match.studentName}" (${match.busRouteName || 'Assigned route'}, Stop: ${match.stoppingName})`,
+        };
+      }
+    }
+  } catch {
+    // Ignore parse error
+  }
+
+  return { exists: false, message: 'Register Number available' };
+}
+
 // 3. Save student (MySQL first, fallback to localStorage)
 export async function saveStudentToDb(
   studentData: Omit<Student, 'id' | 'createdAt' | 'updatedAt'>
@@ -100,15 +151,37 @@ export async function saveStudentToDb(
         console.log('✅ [TMS API] Student saved to Railway MySQL successfully:', result.data);
         return { savedStudent: result.data, source: 'mysql' };
       }
+    } else if (res.status === 409 || res.status === 400) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Register Number "${studentData.identifier}" is already registered in the system.`);
     } else {
-      const errBody = await res.text();
-      console.error(`❌ [TMS API] Backend responded with HTTP ${res.status}:`, errBody);
+      const errData = await res.json().catch(() => ({}));
+      if (errData.error) {
+        throw new Error(errData.error);
+      }
     }
   } catch (error: any) {
+    // If it's a specific validation or duplicate rejection, rethrow immediately to notify user
+    if (error.message && (error.message.includes('already registered') || error.message.includes('Multiple submissions'))) {
+      throw error;
+    }
     console.warn('⚠️ [TMS API] MySQL API unreachable, falling back to local browser storage:', error?.message || error);
   }
 
-  // Local storage fallback
+  // Local storage fallback (offline)
+  const existing = localStorage.getItem(STORAGE_KEY);
+  const list: Student[] = existing ? JSON.parse(existing) : [];
+
+  // Check if identifier already exists locally
+  const duplicate = list.find(
+    (s) => s.identifier.trim().toLowerCase() === studentData.identifier.trim().toLowerCase()
+  );
+  if (duplicate) {
+    throw new Error(
+      `Register Number "${studentData.identifier}" is already registered for "${duplicate.studentName}". Multiple submissions are not allowed.`
+    );
+  }
+
   const localStudent: Student = {
     ...studentData,
     id: `stu-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -116,8 +189,6 @@ export async function saveStudentToDb(
   };
 
   try {
-    const existing = localStorage.getItem(STORAGE_KEY);
-    const list: Student[] = existing ? JSON.parse(existing) : [];
     const updated = [localStudent, ...list];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   } catch (err) {
