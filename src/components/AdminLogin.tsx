@@ -14,6 +14,9 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onCancel
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [authStage, setAuthStage] = useState<'idle' | 'checking' | 'authorizing'>('idle');
+  const [showPrankModal, setShowPrankModal] = useState(false);
+  const [failCount, setFailCount] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -26,17 +29,30 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onCancel
     }
 
     setIsLoading(true);
+    setAuthStage('checking');
+
+    // Simulate authentic security handshake
+    await new Promise((r) => setTimeout(r, 900));
+    setAuthStage('authorizing');
+    await new Promise((r) => setTimeout(r, 900));
+
     try {
       const result = await adminLogin(username, password, rememberMe);
       if (result.success && result.user) {
         onLoginSuccess(result.user);
+        return;
       } else {
-        setErrorMessage(result.error || 'Authentication failed. Please check your credentials.');
+        // Wrong password / unauthorized access attempt -> trigger prank!
+        setFailCount((prev) => prev + 1);
+        setShowPrankModal(true);
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'An unexpected error occurred during login.');
+    } catch {
+      // Network/auth error on wrong password -> trigger prank!
+      setFailCount((prev) => prev + 1);
+      setShowPrankModal(true);
     } finally {
       setIsLoading(false);
+      setAuthStage('idle');
     }
   };
 
@@ -160,12 +176,16 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onCancel
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full mt-2 inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 shadow-md shadow-indigo-600/20 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full mt-2 inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs sm:text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 shadow-md shadow-indigo-600/20 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Authenticating...</span>
+                <Loader2 className="h-4 w-4 animate-spin text-white" />
+                <span>
+                  {authStage === 'authorizing'
+                    ? 'Accessing administrator portal...'
+                    : 'Verifying credentials...'}
+                </span>
               </>
             ) : (
               <>
@@ -183,6 +203,165 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onCancel
           </p>
         </div>
       </div>
+
+      {/* Prank Modal for Unauthorized / Wrong Password Attempts */}
+      {showPrankModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in fade-in duration-300">
+          {/* Ambient dynamic background glows */}
+          <div className="absolute top-1/4 left-1/3 w-72 h-72 bg-rose-600/25 rounded-full blur-[100px] pointer-events-none animate-pulse" />
+          <div className="absolute bottom-1/4 right-1/3 w-72 h-72 bg-fuchsia-600/20 rounded-full blur-[100px] pointer-events-none animate-pulse delay-700" />
+
+          {/* Outer glowing border card */}
+          <div className="relative max-w-xs sm:max-w-sm w-full rounded-3xl p-[2px] bg-gradient-to-b from-rose-500 via-pink-500 to-purple-600 shadow-[0_0_60px_rgba(244,63,94,0.45)] animate-in zoom-in-95 duration-200">
+            {/* Inner Dark Glass Container */}
+            <div className="bg-slate-950/95 backdrop-blur-2xl rounded-[22px] p-5 sm:p-6 text-center space-y-4 relative overflow-hidden border border-white/10">
+              {/* Top ambient highlight line */}
+              <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-rose-400 to-transparent" />
+
+              {/* Status Badge */}
+              <div className="flex justify-center">
+                {failCount >= 3 ? (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[11px] font-extrabold tracking-wider uppercase shadow-[0_0_15px_rgba(168,85,247,0.3)]">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500" />
+                    </span>
+                    <span>GOOD BYE — YOU ARE GUY 💀</span>
+                  </div>
+                ) : failCount === 2 ? (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-500/15 border border-pink-500/30 text-pink-300 text-[11px] font-extrabold tracking-wider uppercase shadow-[0_0_15px_rgba(236,72,153,0.3)]">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-pink-500" />
+                    </span>
+                    <span>ATTEMPT #2 — YOU ARE GUY</span>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-extrabold tracking-wider uppercase shadow-[0_0_15px_rgba(244,63,94,0.3)]">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
+                    </span>
+                    <span>UNAUTHORIZED — YOU ARE GUY</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Prank Media Framed in Sleek Cyber Frame */}
+              <div className="flex justify-center">
+                <div className="relative rounded-2xl overflow-hidden bg-black/90 border border-white/10 shadow-[0_10px_35px_rgba(0,0,0,0.9),inset_0_0_20px_rgba(244,63,94,0.2)] ring-1 ring-white/10 max-w-[230px] w-full p-2 group/img">
+                  <div className="relative rounded-xl overflow-hidden bg-black flex items-center justify-center">
+                    <img
+                      src={failCount >= 2 ? "/prank2.gif" : "/prank.png"}
+                      alt={failCount >= 2 ? "Thinking About You" : "Access Denied"}
+                      className="w-full h-auto object-contain max-h-64 rounded-lg transform group-hover/img:scale-105 transition-transform duration-300"
+                    />
+                  </div>
+                  {/* Cyberpunk corner brackets */}
+                  <div className="absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t-2 border-l-2 border-rose-400 rounded-tl-sm pointer-events-none" />
+                  <div className="absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t-2 border-r-2 border-rose-400 rounded-tr-sm pointer-events-none" />
+                  <div className="absolute bottom-1.5 left-1.5 w-2.5 h-2.5 border-b-2 border-l-2 border-rose-400 rounded-bl-sm pointer-events-none" />
+                  <div className="absolute bottom-1.5 right-1.5 w-2.5 h-2.5 border-b-2 border-r-2 border-rose-400 rounded-br-sm pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Punchy Text Content */}
+              <div className="space-y-2">
+                {failCount >= 3 ? (
+                  <>
+                    <h3 className="text-xl font-black bg-gradient-to-r from-purple-400 via-pink-300 to-amber-300 bg-clip-text text-transparent tracking-tight uppercase drop-shadow">
+                      🛑 GOOD BYE!
+                    </h3>
+                    <div className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-purple-950/70 via-rose-950/60 to-pink-950/70 border border-purple-500/30 shadow-inner">
+                      <p className="text-base sm:text-lg font-black text-rose-100 tracking-wide font-mono">
+                        "i cant fuck you any more good bye"
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-black/40 border border-rose-500/20 px-2.5 py-1.5">
+                      <p className="text-xs font-bold text-rose-300">
+                        Attempt #{failCount}: If you try next attempt you are gay! 
+                    </div>
+                  </>
+                ) : failCount === 2 ? (
+                  <>
+                    <h3 className="text-xl font-black bg-gradient-to-r from-pink-400 via-rose-300 to-amber-300 bg-clip-text text-transparent tracking-tight uppercase drop-shadow">
+                      🥱 STILL TRYING?
+                    </h3>
+                    <div className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-rose-950/70 via-purple-950/60 to-pink-950/70 border border-rose-500/30 shadow-inner space-y-1">
+                      <p className="text-base sm:text-lg font-black text-rose-100 tracking-wide font-mono">
+                        "i am so tired of fucking you"
+                      </p>
+                      <p className="text-xs sm:text-sm font-bold text-pink-300 font-mono">
+                        "i cant fuck you any more good bye"
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-black/40 border border-rose-500/20 px-2.5 py-1.5">
+                      <p className="text-xs font-bold text-rose-300">
+                        Attempt #2: If you try next attempt you are gay! 
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-xl font-black bg-gradient-to-r from-rose-400 via-red-300 to-amber-300 bg-clip-text text-transparent tracking-tight uppercase drop-shadow">
+                      🚨 ACCESS DENIED
+                    </h3>
+                    <div className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-rose-950/70 via-purple-950/60 to-pink-950/70 border border-rose-500/30 shadow-inner">
+                      <p className="text-base sm:text-lg font-black text-rose-100 tracking-wide font-mono">
+                        "I fucked up"
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-black/40 border border-rose-500/20 px-2.5 py-1.5">
+                      <p className="text-xs font-bold text-rose-300">
+                        Attempt #1: If you try next attempt you are gay! 
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Catchy Action Button */}
+              <button
+                type="button"
+                id="prank-done-btn"
+                onClick={() => {
+                  setShowPrankModal(false);
+                  setPassword('');
+                  setErrorMessage(
+                    failCount >= 3
+                      ? `Attempt #${failCount} failed: i cant fuck you any more good bye! (You are guy)`
+                      : failCount === 2
+                      ? `Attempt #2 failed: You are guy! If you try next attempt you are guy.`
+                      : 'Attempt #1 failed: Unauthorized access. If you try next attempt you are guy!'
+                  );
+                }}
+                className="relative w-full py-3.5 px-6 rounded-xl font-black text-sm tracking-wide text-white bg-gradient-to-r from-rose-600 via-pink-600 to-purple-600 hover:from-rose-500 hover:via-pink-500 hover:to-purple-500 shadow-[0_0_25px_rgba(244,63,94,0.45)] hover:shadow-[0_0_35px_rgba(244,63,94,0.7)] active:scale-[0.98] transition-all duration-200 cursor-pointer overflow-hidden group"
+              >
+                <span className="relative z-10 flex items-center justify-center gap-2">
+                  {failCount >= 3 ? (
+                    <>
+                      <span>Done — i cant fuck you any more good bye</span>
+                      <span className="text-base">💀</span>
+                    </>
+                  ) : failCount === 2 ? (
+                    <>
+                      <span>Done — I am so tired of this (You are guy)</span>
+                      <span className="text-base">💀</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Done — I fucked up (You are guy)</span>
+                      <span className="text-base">🤦‍♂️</span>
+                    </>
+                  )}
+                </span>
+                {/* Shimmer sweep animation on hover */}
+                <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 ease-in-out pointer-events-none" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
