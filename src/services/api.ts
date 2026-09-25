@@ -1,6 +1,7 @@
 import { Student } from '../types';
 
 const STORAGE_KEY = 'student_data_registry_records_v1';
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 export interface DbStatus {
   connected: boolean;
@@ -13,7 +14,7 @@ export async function checkDbHealth(): Promise<DbStatus> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch('/api/health', { signal: controller.signal });
+    const res = await fetch(`${API_BASE}/api/health`, { signal: controller.signal });
     clearTimeout(timeoutId);
 
     if (res.ok) {
@@ -31,7 +32,7 @@ export async function fetchStudentsFromDb(): Promise<{ students: Student[]; sour
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch('/api/students', { signal: controller.signal });
+    const res = await fetch(`${API_BASE}/api/students`, { signal: controller.signal });
     clearTimeout(timeoutId);
 
     if (res.ok) {
@@ -62,7 +63,7 @@ export async function saveStudentToDb(
   studentData: Omit<Student, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<{ savedStudent: Student; source: 'mysql' | 'local' }> {
   try {
-    const res = await fetch('/api/students', {
+    const res = await fetch(`${API_BASE}/api/students`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(studentData),
@@ -139,7 +140,7 @@ export async function adminLogin(
 
   // 1. Try Backend API
   try {
-    const res = await fetch('/api/admin/login', {
+    const res = await fetch(`${API_BASE}/api/admin/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: cleanUser, password: cleanPass }),

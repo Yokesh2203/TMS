@@ -27,7 +27,21 @@ let pool = null;
 
 function getPool() {
   if (!pool) {
-    pool = mysql.createPool(dbConfig);
+    if (process.env.DATABASE_URL) {
+      pool = mysql.createPool({
+        uri: process.env.DATABASE_URL,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0,
+        ssl: process.env.DB_SSL === 'false' ? undefined : { rejectUnauthorized: false },
+      });
+    } else {
+      const isCloudHost = dbConfig.host && dbConfig.host !== 'localhost' && dbConfig.host !== '127.0.0.1';
+      pool = mysql.createPool({
+        ...dbConfig,
+        ssl: (process.env.DB_SSL === 'true' || isCloudHost) ? { rejectUnauthorized: false } : undefined,
+      });
+    }
   }
   return pool;
 }
@@ -35,18 +49,25 @@ function getPool() {
 // Auto-create students table if not exists
 async function initializeDatabase() {
   try {
-    // First, create the database if it doesn't exist
-    const initConn = await mysql.createConnection({
-      host: dbConfig.host,
-      port: dbConfig.port,
-      user: dbConfig.user,
-      password: dbConfig.password,
-    });
-    await initConn.query(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-    await initConn.end();
-    console.log(`✅ Database \`${dbConfig.database}\` is ready.`);
+    // Attempt local DB creation if running on localhost
+    if (!process.env.DATABASE_URL && (dbConfig.host === 'localhost' || dbConfig.host === '127.0.0.1')) {
+      try {
+        const initConn = await mysql.createConnection({
+          host: dbConfig.host,
+          port: dbConfig.port,
+          user: dbConfig.user,
+          password: dbConfig.password,
+        });
+        await initConn.query(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+        await initConn.end();
+      } catch (e) {
+        // Ignored for environments where DB is pre-created
+      }
+    }
 
     const db = getPool();
+    await db.query('SELECT 1');
+    console.log(`✅ Connected to MySQL database successfully.`);
 
     // Create students table if it doesn't exist
     await db.query(`
