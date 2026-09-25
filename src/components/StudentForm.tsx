@@ -58,7 +58,9 @@ export const StudentForm: React.FC<StudentFormProps> = ({
   // Search input state for quick Stop / Route lookup
   const [stopSearchQuery, setStopSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const resultItemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -69,6 +71,18 @@ export const StudentForm: React.FC<StudentFormProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // When search query changes, reset highlighted index to 0
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [stopSearchQuery]);
+
+  // Scroll active item into view when highlightedIndex changes
+  useEffect(() => {
+    if (isSearchOpen && highlightedIndex >= 0 && resultItemRefs.current[highlightedIndex]) {
+      resultItemRefs.current[highlightedIndex]?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [highlightedIndex, isSearchOpen]);
 
   const selectedInstitution = INSTITUTIONS[0] || {
     id: '1',
@@ -167,6 +181,39 @@ export const StudentForm: React.FC<StudentFormProps> = ({
         delete next.stoppingName;
         return next;
       });
+    }
+  };
+
+  // Keyboard navigation for search input (ArrowDown, ArrowUp, Enter, Escape)
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!isSearchOpen) {
+        setIsSearchOpen(true);
+        return;
+      }
+      if (searchResults.length > 0) {
+        setHighlightedIndex((prev) => (prev < searchResults.length - 1 ? prev + 1 : 0));
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!isSearchOpen) {
+        setIsSearchOpen(true);
+        return;
+      }
+      if (searchResults.length > 0) {
+        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : searchResults.length - 1));
+      }
+    } else if (e.key === 'Enter') {
+      if (isSearchOpen && searchResults.length > 0) {
+        e.preventDefault();
+        const target = searchResults[highlightedIndex >= 0 && highlightedIndex < searchResults.length ? highlightedIndex : 0];
+        if (target) {
+          handleSelectStopAndRoute(target.routeId, target.stopName);
+        }
+      }
+    } else if (e.key === 'Escape') {
+      setIsSearchOpen(false);
     }
   };
 
@@ -672,6 +719,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                         setStopSearchQuery(e.target.value);
                         setIsSearchOpen(true);
                       }}
+                      onKeyDown={handleSearchKeyDown}
                       onFocus={() => setIsSearchOpen(true)}
                       className="w-full pl-10 pr-9 py-2.5 text-sm bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-500 transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
                     />
@@ -710,37 +758,69 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                       <div>
                         <div className="p-2.5 bg-indigo-50/60 text-[11px] font-semibold text-indigo-900 flex items-center justify-between sticky top-0 z-10 border-b border-indigo-100">
                           <span>Found {searchResults.length} matching stop{searchResults.length > 1 ? 's' : ''} / routes</span>
-                          <span className="text-slate-400 font-normal">Click to auto-select</span>
+                          <span className="text-slate-400 font-normal">Use ↑ ↓ arrows &amp; Enter to select</span>
                         </div>
-                        {searchResults.map((item, idx) => (
-                          <button
-                            key={`${item.routeId}-${item.stopName}-${idx}`}
-                            type="button"
-                            onClick={() => handleSelectStopAndRoute(item.routeId, item.stopName)}
-                            className="w-full text-left px-4 py-2.5 hover:bg-indigo-50/80 transition-colors flex items-center justify-between gap-3 group cursor-pointer"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <span className={`px-2 py-0.5 text-[10px] font-semibold uppercase rounded-md shrink-0 ${
-                                item.type === 'stop'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-emerald-100 text-emerald-800'
-                              }`}>
-                                {item.type === 'stop' ? 'Stop' : 'Route'}
-                              </span>
-                              <div className="min-w-0">
-                                <p className="text-xs font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
-                                  {item.title}
-                                </p>
-                                <p className="text-[11px] text-slate-500 truncate">
-                                  {item.subtitle}
-                                </p>
+                        {searchResults.map((item, idx) => {
+                          const isHighlighted = idx === highlightedIndex;
+                          return (
+                            <button
+                              key={`${item.routeId}-${item.stopName}-${idx}`}
+                              ref={(el) => {
+                                resultItemRefs.current[idx] = el;
+                              }}
+                              type="button"
+                              onMouseEnter={() => setHighlightedIndex(idx)}
+                              onClick={() => handleSelectStopAndRoute(item.routeId, item.stopName)}
+                              className={`w-full text-left px-4 py-2.5 transition-all flex items-center justify-between gap-3 group cursor-pointer ${
+                                isHighlighted
+                                  ? 'bg-indigo-100/90 text-indigo-950 font-semibold border-l-4 border-indigo-600 shadow-2xs'
+                                  : 'hover:bg-indigo-50/70 text-slate-800'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span
+                                  className={`px-2 py-0.5 text-[10px] font-semibold uppercase rounded-md shrink-0 ${
+                                    item.type === 'stop'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : 'bg-emerald-100 text-emerald-800'
+                                  }`}
+                                >
+                                  {item.type === 'stop' ? 'Stop' : 'Route'}
+                                </span>
+                                <div className="min-w-0">
+                                  <p
+                                    className={`text-xs truncate ${
+                                      isHighlighted
+                                        ? 'text-indigo-950 font-bold'
+                                        : 'text-slate-900 group-hover:text-indigo-600'
+                                    }`}
+                                  >
+                                    {item.title}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500 truncate">
+                                    {item.subtitle}
+                                  </p>
+                                </div>
                               </div>
-                            </div>
-                            <span className="text-[11px] text-indigo-600 font-medium shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                              Select <ArrowRight className="h-3 w-3" />
-                            </span>
-                          </button>
-                        ))}
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {isHighlighted && (
+                                  <span className="hidden sm:inline text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-medium shadow-2xs">
+                                    Press Enter ↵
+                                  </span>
+                                )}
+                                <span
+                                  className={`text-[11px] font-medium flex items-center gap-1 ${
+                                    isHighlighted
+                                      ? 'text-indigo-700'
+                                      : 'text-indigo-600 opacity-0 group-hover:opacity-100'
+                                  }`}
+                                >
+                                  Select <ArrowRight className="h-3 w-3" />
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
                     ) : stopSearchQuery.trim() ? (
                       <div className="p-4 text-center text-xs text-slate-500">
