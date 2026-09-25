@@ -375,6 +375,19 @@ app.delete('/api/students/:id', async (req, res) => {
   }
 });
 
+// 6. Clear all student records and reset AUTO_INCREMENT to 1
+app.post('/api/admin/clear-students', async (req, res) => {
+  try {
+    const db = getPool();
+    await db.query('TRUNCATE TABLE students');
+    console.log('🧹 Truncated students table. S.No / id reset to 1.');
+    res.json({ success: true, message: 'All student records cleared and S.No reset to 1.' });
+  } catch (error) {
+    console.error('Error clearing students table:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Start Express server
 app.listen(PORT, async () => {
   console.log(`🚀 TMS Backend Server running on http://localhost:${PORT}`);

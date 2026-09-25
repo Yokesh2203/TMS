@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   GraduationCap,
   Bus,
@@ -13,6 +13,9 @@ import {
   ShieldCheck,
   Hash,
   BookOpen,
+  Search,
+  X,
+  Navigation,
 } from 'lucide-react';
 import {
   Student,
@@ -52,6 +55,21 @@ export const StudentForm: React.FC<StudentFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<ToastData | null>(null);
 
+  // Search input state for quick Stop / Route lookup
+  const [stopSearchQuery, setStopSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setIsSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const selectedInstitution = INSTITUTIONS[0] || {
     id: '1',
     name: 'Nadar Saraswathi College of Engineering & Technology (NSCET)',
@@ -63,6 +81,94 @@ export const StudentForm: React.FC<StudentFormProps> = ({
   // Selected route and available stops
   const selectedRoute = BUS_ROUTES.find((r) => r.id === formData.busRouteId);
   const availableStops = selectedRoute ? selectedRoute.stops : [];
+
+  // Map of every unique stop across all 187 routes with its routes
+  const allUniqueStops = useMemo(() => {
+    const map = new Map<string, Array<{ routeId: string; routeNumber: string; routeName: string }>>();
+    BUS_ROUTES.forEach((route) => {
+      route.stops.forEach((stop) => {
+        const clean = stop.trim();
+        if (!clean) return;
+        if (!map.has(clean)) {
+          map.set(clean, []);
+        }
+        map.get(clean)!.push({
+          routeId: route.id,
+          routeNumber: route.routeNumber,
+          routeName: route.name,
+        });
+      });
+    });
+    return Array.from(map.entries())
+      .map(([stopName, routes]) => ({ stopName, routes }))
+      .sort((a, b) => a.stopName.localeCompare(b.stopName));
+  }, []);
+
+  // Search results matching stop name or route name
+  const searchResults = useMemo(() => {
+    const q = stopSearchQuery.trim().toLowerCase();
+    if (!q) return [];
+
+    const matches: Array<{
+      type: 'stop' | 'route';
+      title: string;
+      subtitle: string;
+      routeId: string;
+      stopName: string;
+    }> = [];
+
+    // 1. Matches on Stop names
+    allUniqueStops.forEach((item) => {
+      if (item.stopName.toLowerCase().includes(q)) {
+        item.routes.forEach((r) => {
+          matches.push({
+            type: 'stop',
+            title: item.stopName,
+            subtitle: `${r.routeNumber} — ${r.routeName}`,
+            routeId: r.routeId,
+            stopName: item.stopName,
+          });
+        });
+      }
+    });
+
+    // 2. Matches on Route names or numbers
+    BUS_ROUTES.forEach((r) => {
+      if (r.name.toLowerCase().includes(q) || r.routeNumber.toLowerCase().includes(q)) {
+        if (r.stops.length > 0) {
+          matches.push({
+            type: 'route',
+            title: `${r.routeNumber} — ${r.name}`,
+            subtitle: `Covers ${r.stops.length} stops (e.g. ${r.stops[0]})`,
+            routeId: r.id,
+            stopName: r.stops[0],
+          });
+        }
+      }
+    });
+
+    return matches.slice(0, 30);
+  }, [stopSearchQuery, allUniqueStops]);
+
+  // Handle direct selection from search result
+  const handleSelectStopAndRoute = (routeId: string, stopName: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      busRouteId: routeId,
+      stoppingName: stopName,
+    }));
+    setStopSearchQuery('');
+    setIsSearchOpen(false);
+
+    if (errors.busRouteId || errors.stoppingName) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.busRouteId;
+        delete next.stoppingName;
+        return next;
+      });
+    }
+  };
 
   // Handle route change -> dynamically updates boarding stops
   const handleRouteChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -81,6 +187,44 @@ export const StudentForm: React.FC<StudentFormProps> = ({
     if (errors.busRouteId) {
       setErrors((prev) => {
         const next = { ...prev };
+        delete next.busRouteId;
+        return next;
+      });
+    }
+  };
+
+  // Handle stop change: automatically finds and sets the route if not already set or invalid
+  const handleStopChange = (stopName: string) => {
+    if (stopName === '__SHOW_ALL_STOPS__') {
+      setFormData((prev) => ({ ...prev, busRouteId: '', stoppingName: '' }));
+      return;
+    }
+
+    const clean = stopName.trim();
+    if (!clean) {
+      setFormData((prev) => ({ ...prev, stoppingName: '' }));
+      return;
+    }
+
+    const matchingRoutes = BUS_ROUTES.filter((r) =>
+      r.stops.some((s) => s.trim().toLowerCase() === clean.toLowerCase())
+    );
+
+    let targetRouteId = formData.busRouteId;
+    if (!targetRouteId || !matchingRoutes.some((r) => r.id === targetRouteId)) {
+      targetRouteId = matchingRoutes.length > 0 ? matchingRoutes[0].id : formData.busRouteId;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      stoppingName: clean,
+      busRouteId: targetRouteId || prev.busRouteId,
+    }));
+
+    if (errors.stoppingName || errors.busRouteId) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.stoppingName;
         delete next.busRouteId;
         return next;
       });
@@ -478,7 +622,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
 
           {/* SECTION 3: Bus Transport & Boarding Assignment */}
           <div className="space-y-4 pt-2 border-t border-slate-100">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-xs font-bold text-slate-800 tracking-wide uppercase">
                 <span className="flex items-center justify-center h-5 w-5 rounded-full bg-indigo-100 text-indigo-800 text-[11px] font-bold">
                   3
@@ -501,6 +645,160 @@ export const StudentForm: React.FC<StudentFormProps> = ({
               )}
             </div>
 
+            {/* Quick Stop & Route Finder Search Bar with Search Button */}
+            <div className="bg-gradient-to-r from-indigo-50/70 via-blue-50/50 to-slate-50 border border-indigo-100/80 rounded-2xl p-3.5 sm:p-4 space-y-2.5" ref={searchContainerRef}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <label
+                  htmlFor="stop-search-input"
+                  className="text-xs font-semibold text-indigo-950 flex items-center gap-1.5"
+                >
+                  <Search className="h-3.5 w-3.5 text-indigo-600" />
+                  <span>Don't know your route name? Search by Stop or Village:</span>
+                </label>
+                <span className="text-[11px] text-indigo-600 font-medium">
+                  {allUniqueStops.length} stops & {BUS_ROUTES.length} routes available
+                </span>
+              </div>
+
+              <div className="relative">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      id="stop-search-input"
+                      placeholder="Type stop name (e.g. Park Stop, Aranmanai, G.H, Theni, Chinnamanur, Cumbum, Bodi)..."
+                      value={stopSearchQuery}
+                      onChange={(e) => {
+                        setStopSearchQuery(e.target.value);
+                        setIsSearchOpen(true);
+                      }}
+                      onFocus={() => setIsSearchOpen(true)}
+                      className="w-full pl-10 pr-9 py-2.5 text-sm bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-500 transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
+                    />
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-indigo-500">
+                      <Search className="h-4 w-4" />
+                    </div>
+                    {stopSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStopSearchQuery('');
+                          setIsSearchOpen(false);
+                        }}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    id="search-stop-btn"
+                    onClick={() => setIsSearchOpen((prev) => !prev)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl text-sm font-semibold shadow-xs hover:shadow transition-all shrink-0 cursor-pointer"
+                  >
+                    <Search className="h-4 w-4" />
+                    <span className="hidden sm:inline">Search</span> Stop
+                  </button>
+                </div>
+
+                {/* Search Results Popover */}
+                {isSearchOpen && (
+                  <div className="absolute z-30 left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-indigo-100 max-h-72 overflow-y-auto divide-y divide-slate-100 animate-in fade-in zoom-in-95 duration-150">
+                    {searchResults.length > 0 ? (
+                      <div>
+                        <div className="p-2.5 bg-indigo-50/60 text-[11px] font-semibold text-indigo-900 flex items-center justify-between sticky top-0 z-10 border-b border-indigo-100">
+                          <span>Found {searchResults.length} matching stop{searchResults.length > 1 ? 's' : ''} / routes</span>
+                          <span className="text-slate-400 font-normal">Click to auto-select</span>
+                        </div>
+                        {searchResults.map((item, idx) => (
+                          <button
+                            key={`${item.routeId}-${item.stopName}-${idx}`}
+                            type="button"
+                            onClick={() => handleSelectStopAndRoute(item.routeId, item.stopName)}
+                            className="w-full text-left px-4 py-2.5 hover:bg-indigo-50/80 transition-colors flex items-center justify-between gap-3 group cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className={`px-2 py-0.5 text-[10px] font-semibold uppercase rounded-md shrink-0 ${
+                                item.type === 'stop'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-emerald-100 text-emerald-800'
+                              }`}>
+                                {item.type === 'stop' ? 'Stop' : 'Route'}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
+                                  {item.title}
+                                </p>
+                                <p className="text-[11px] text-slate-500 truncate">
+                                  {item.subtitle}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-[11px] text-indigo-600 font-medium shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                              Select <ArrowRight className="h-3 w-3" />
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : stopSearchQuery.trim() ? (
+                      <div className="p-4 text-center text-xs text-slate-500">
+                        No stops or routes found matching "{stopSearchQuery}". Please try another village or stop name.
+                      </div>
+                    ) : (
+                      <div className="p-4 text-xs text-slate-600 space-y-2">
+                        <p className="font-semibold text-slate-800">Popular Boarding Locations:</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {['PARK STOP', 'BODI', 'CHINNAMANUR', 'AUNDIPATTI', 'PERIYAKULAM', 'THENI NEW BUS STAND', 'CUMBUM', 'VEERAPANDI'].map((name) => (
+                            <button
+                              key={name}
+                              type="button"
+                              onClick={() => {
+                                setStopSearchQuery(name);
+                                setIsSearchOpen(true);
+                              }}
+                              className="px-2.5 py-1 text-xs bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-800 rounded-lg transition-colors cursor-pointer"
+                            >
+                              {name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Selection Confirmation Card */}
+            {formData.stoppingName && formData.busRouteId && selectedRoute && (
+              <div className="bg-emerald-50/80 border border-emerald-200/90 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-in fade-in duration-150">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                    <Navigation className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-emerald-950">
+                      Assigned Stop: <span className="text-emerald-700 font-bold">{formData.stoppingName}</span>
+                    </p>
+                    <p className="text-[11px] text-emerald-800">
+                      {selectedRoute.routeNumber} — {selectedRoute.name} (Departs: {selectedRoute.timing})
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setFormData((prev) => ({ ...prev, busRouteId: '', stoppingName: '' }))}
+                  className="text-[11px] font-medium text-emerald-700 hover:text-emerald-900 underline self-start sm:self-center cursor-pointer"
+                >
+                  Change Selection
+                </button>
+              </div>
+            )}
+
+            {/* Route & Stop Dropdowns */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
               {/* Bus Route Dropdown */}
               <div>
@@ -512,7 +810,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                     Bus Route <span className="text-rose-500">*</span>
                   </label>
                   <span className="text-[11px] text-slate-500 font-medium">
-                    {BUS_ROUTES.length} NSCET routes available
+                    {BUS_ROUTES.length} NSCET routes
                   </span>
                 </div>
                 <div className="relative">
@@ -554,35 +852,44 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                   >
                     Boarding Stop <span className="text-rose-500">*</span>
                   </label>
-                  {formData.busRouteId && (
-                    <span className="text-[11px] text-indigo-700 font-medium">
-                      {availableStops.length} stops on this route
-                    </span>
-                  )}
+                  <span className="text-[11px] text-indigo-700 font-medium">
+                    {formData.busRouteId
+                      ? `${availableStops.length} stops on this route`
+                      : `${allUniqueStops.length} all stops (select directly)`}
+                  </span>
                 </div>
 
                 <div className="relative">
                   <select
                     id="stopping-name-select"
                     value={formData.stoppingName}
-                    onChange={(e) => handleInputChange('stoppingName', e.target.value)}
-                    disabled={!formData.busRouteId}
-                    className={`w-full px-4 py-2.5 text-sm bg-slate-50/50 hover:bg-white focus:bg-white border rounded-xl appearance-none pr-10 focus:outline-none focus:ring-2 transition-all disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400 ${
+                    onChange={(e) => handleStopChange(e.target.value)}
+                    className={`w-full px-4 py-2.5 text-sm bg-slate-50/50 hover:bg-white focus:bg-white border rounded-xl appearance-none pr-10 focus:outline-none focus:ring-2 transition-all cursor-pointer ${
                       errors.stoppingName
                         ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-200 text-rose-900'
                         : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-100 text-slate-900'
                     }`}
                   >
-                    <option value="">
-                      {formData.busRouteId
-                        ? '-- Choose Boarding Stop --'
-                        : '-- Select Route First --'}
-                    </option>
-                    {availableStops.map((stop) => (
-                      <option key={stop} value={stop}>
-                        {stop}
-                      </option>
-                    ))}
+                    {formData.busRouteId ? (
+                      <>
+                        <option value="">-- Choose Boarding Stop on Route ({availableStops.length}) --</option>
+                        {availableStops.map((stop) => (
+                          <option key={stop} value={stop}>
+                            {stop}
+                          </option>
+                        ))}
+                        <option value="__SHOW_ALL_STOPS__">🔄 Browse all {allUniqueStops.length} stops across all routes</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="">-- Select Any Boarding Stop ({allUniqueStops.length}) --</option>
+                        {allUniqueStops.map((s) => (
+                          <option key={s.stopName} value={s.stopName}>
+                            {s.stopName} {s.routes[0] ? `(${s.routes[0].routeNumber})` : ''}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-400">
                     <MapPin className="w-4 h-4" />

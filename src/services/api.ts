@@ -229,3 +229,23 @@ export function adminLogout(): void {
     console.error('Error clearing admin session:', e);
   }
 }
+
+// 5. Clear all student records and reset S.No to 1
+export async function clearAllStudentsFromDb(): Promise<{ success: boolean; message?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/clear-students`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (res.ok) {
+      localStorage.removeItem(STORAGE_KEY);
+      return { success: true, message: 'All student records cleared and S.No reset to 1.' };
+    }
+  } catch (err) {
+    console.warn('Backend clear request failed, clearing local storage:', err);
+  }
+
+  localStorage.removeItem(STORAGE_KEY);
+  return { success: true, message: 'Local student records cleared.' };
+}
+
