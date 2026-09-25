@@ -11,7 +11,7 @@ export const INSTITUTIONS: Institution[] = [
   }
 ];
 
-export const BUS_ROUTES: BusRoute[] = [
+const ALL_RAW_ROUTES: BusRoute[] = [
   {
     "id": "1",
     "routeNumber": "ROUTE 101",
@@ -4238,6 +4238,11 @@ export const BUS_ROUTES: BusRoute[] = [
     ]
   }
 ];
+
+// Only NSCET Engineering College Transit Routes (ROUTE 101 to ROUTE 121)
+export const BUS_ROUTES: BusRoute[] = ALL_RAW_ROUTES.filter(
+  (r) => r.institutionId === '1' || r.routeNumber.trim().startsWith('ROUTE 1')
+);
 
 export const ENGINEERING_DEPARTMENTS = [
   { code: 'AD', name: 'Artificial Intelligence & Data Science' },

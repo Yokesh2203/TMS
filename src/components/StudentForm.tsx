@@ -656,7 +656,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                   <span>Don't know your route name? Search by Stop or Village:</span>
                 </label>
                 <span className="text-[11px] text-indigo-600 font-medium">
-                  {allUniqueStops.length} stops & {BUS_ROUTES.length} routes available
+                  {allUniqueStops.length} stops & {BUS_ROUTES.length} Engineering routes (Route 101 – 121)
                 </span>
               </div>
 
@@ -810,7 +810,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                     Bus Route <span className="text-rose-500">*</span>
                   </label>
                   <span className="text-[11px] text-slate-500 font-medium">
-                    {BUS_ROUTES.length} NSCET routes
+                    {BUS_ROUTES.length} Engineering routes (101 – 121)
                   </span>
                 </div>
                 <div className="relative">
@@ -824,7 +824,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                         : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-100 text-slate-900'
                     }`}
                   >
-                    <option value="">-- Choose Transit Route ({BUS_ROUTES.length}) --</option>
+                    <option value="">-- Choose Engineering Route ({BUS_ROUTES.length} Routes: 101 – 121) --</option>
                     {BUS_ROUTES.map((route) => (
                       <option key={route.id} value={route.id}>
                         {route.routeNumber} — {route.name} {route.origin && route.origin !== route.name ? `[${route.origin}]` : ''}
