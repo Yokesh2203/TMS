@@ -1,7 +1,31 @@
 import { Student } from '../types';
 
 const STORAGE_KEY = 'student_data_registry_records_v1';
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
+function getApiBase(): string {
+  let base = (import.meta.env.VITE_API_BASE_URL || '').trim();
+  
+  if (base.startsWith('mysql://')) {
+    console.error('❌ Configuration Error: VITE_API_BASE_URL cannot be a mysql:// connection string. It must be your Railway Web Service HTTPS URL, e.g. https://your-app.up.railway.app');
+    return '';
+  }
+
+  // Strip trailing slashes and redundant /api suffix
+  base = base.replace(/\/+$/, '').replace(/\/api$/, '');
+
+  // Auto-prepend https:// if protocol was omitted
+  if (base && !base.startsWith('http://') && !base.startsWith('https://')) {
+    base = `https://${base}`;
+  }
+
+  return base;
+}
+
+export const API_BASE = getApiBase();
+
+if (typeof window !== 'undefined') {
+  console.log('📡 [TMS App] Active Backend URL:', API_BASE || '(Local / same-origin)');
+}
 
 export interface DbStatus {
   connected: boolean;
@@ -13,7 +37,7 @@ export interface DbStatus {
 export async function checkDbHealth(): Promise<DbStatus> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(`${API_BASE}/api/health`, { signal: controller.signal });
     clearTimeout(timeoutId);
 
@@ -21,7 +45,7 @@ export async function checkDbHealth(): Promise<DbStatus> {
       const data = await res.json();
       return { connected: data.status === 'connected', database: data.database };
     }
-    return { connected: false, error: 'MySQL Service Offline' };
+    return { connected: false, error: `Backend returned status ${res.status}` };
   } catch (err: any) {
     return { connected: false, error: err.message || 'Server offline' };
   }
@@ -31,7 +55,7 @@ export async function checkDbHealth(): Promise<DbStatus> {
 export async function fetchStudentsFromDb(): Promise<{ students: Student[]; source: 'mysql' | 'local' }> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(`${API_BASE}/api/students`, { signal: controller.signal });
     clearTimeout(timeoutId);
 
@@ -41,8 +65,8 @@ export async function fetchStudentsFromDb(): Promise<{ students: Student[]; sour
         return { students: data.data, source: 'mysql' };
       }
     }
-  } catch {
-    // MySQL server not running, fall through to localStorage
+  } catch (err) {
+    console.warn('[TMS API] Could not fetch students from MySQL, falling back to local storage:', err);
   }
 
   // Fallback to local storage
@@ -63,6 +87,7 @@ export async function saveStudentToDb(
   studentData: Omit<Student, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<{ savedStudent: Student; source: 'mysql' | 'local' }> {
   try {
+    console.log(`📡 [TMS API] Submitting student to: ${API_BASE}/api/students`);
     const res = await fetch(`${API_BASE}/api/students`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -72,11 +97,15 @@ export async function saveStudentToDb(
     if (res.ok) {
       const result = await res.json();
       if (result.success && result.data) {
+        console.log('✅ [TMS API] Student saved to Railway MySQL successfully:', result.data);
         return { savedStudent: result.data, source: 'mysql' };
       }
+    } else {
+      const errBody = await res.text();
+      console.error(`❌ [TMS API] Backend responded with HTTP ${res.status}:`, errBody);
     }
-  } catch (error) {
-    console.warn('MySQL API unreachable, saving to local browser database:', error);
+  } catch (error: any) {
+    console.warn('⚠️ [TMS API] MySQL API unreachable, falling back to local browser storage:', error?.message || error);
   }
 
   // Local storage fallback

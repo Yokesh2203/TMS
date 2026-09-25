@@ -152,14 +152,18 @@ export const StudentForm: React.FC<StudentFormProps> = ({
       };
 
       const result = await onSaveStudent(studentRecord);
-      const isMySql = result?.source === 'mysql' || saveSource === 'mysql';
+      const isMySql = result?.source === 'mysql';
 
       // Trigger Toast notification
       setToast({
         id: `toast-${Date.now()}`,
-        title: 'Registration Submitted Successfully!',
-        message: `${studentRecord.studentName} (${studentRecord.identifier}) was saved to ${isMySql ? 'MySQL (nadar_tms)' : 'database'}.`,
-        type: 'success',
+        title: isMySql 
+          ? 'Registration Saved to Cloud Database!' 
+          : '⚠️ Saved to Local Storage (Backend Offline)',
+        message: isMySql
+          ? `${studentRecord.studentName} (${studentRecord.identifier}) was written directly to Railway MySQL.`
+          : `${studentRecord.studentName} was saved to browser storage because the Railway backend was unreachable.`,
+        type: isMySql ? 'success' : 'info',
         dbSource: isMySql ? 'mysql' : 'local',
       });
 
