@@ -12,12 +12,20 @@ app.use(cors());
 app.use(express.json());
 
 // MySQL connection pool configuration
+const rawDatabaseUrl = 
+  process.env.DATABASE_URL || 
+  process.env.MYSQL_URL || 
+  process.env.MYSQL_PRIVATE_URL || 
+  process.env.MYSQL_PUBLIC_URL;
+
+const defaultDbName = (process.env.MYSQLHOST || process.env.MYSQL_URL) ? 'railway' : 'nadar_tms';
+
 const dbConfig = {
-  host: process.env.DB_HOST || 'localhost',
-  port: Number(process.env.DB_PORT) || 3306,
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'nadar_tms',
+  host: process.env.DB_HOST || process.env.MYSQLHOST || 'localhost',
+  port: Number(process.env.DB_PORT || process.env.MYSQLPORT) || 3306,
+  user: process.env.DB_USER || process.env.MYSQLUSER || 'root',
+  password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD || '',
+  database: process.env.DB_NAME || process.env.MYSQLDATABASE || defaultDbName,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
@@ -27,9 +35,10 @@ let pool = null;
 
 function getPool() {
   if (!pool) {
-    if (process.env.DATABASE_URL) {
+    if (rawDatabaseUrl) {
+      console.log('📡 Connecting to MySQL database via connection URL...');
       pool = mysql.createPool({
-        uri: process.env.DATABASE_URL,
+        uri: rawDatabaseUrl,
         waitForConnections: true,
         connectionLimit: 10,
         queueLimit: 0,
@@ -37,6 +46,7 @@ function getPool() {
       });
     } else {
       const isCloudHost = dbConfig.host && dbConfig.host !== 'localhost' && dbConfig.host !== '127.0.0.1';
+      console.log(`📡 Connecting to MySQL host: ${dbConfig.host}:${dbConfig.port}, database: ${dbConfig.database}`);
       pool = mysql.createPool({
         ...dbConfig,
         ssl: (process.env.DB_SSL === 'true' || isCloudHost) ? { rejectUnauthorized: false } : undefined,
@@ -50,7 +60,7 @@ function getPool() {
 async function initializeDatabase() {
   try {
     // Attempt local DB creation if running on localhost
-    if (!process.env.DATABASE_URL && (dbConfig.host === 'localhost' || dbConfig.host === '127.0.0.1')) {
+    if (!rawDatabaseUrl && (dbConfig.host === 'localhost' || dbConfig.host === '127.0.0.1')) {
       try {
         const initConn = await mysql.createConnection({
           host: dbConfig.host,
@@ -66,8 +76,8 @@ async function initializeDatabase() {
     }
 
     const db = getPool();
-    await db.query('SELECT 1');
-    console.log(`✅ Connected to MySQL database successfully.`);
+    const [verResult] = await db.query('SELECT 1 as connected, DATABASE() as db');
+    console.log(`✅ Connected to MySQL database "${verResult[0]?.db || 'default'}" successfully.`);
 
     // Create students table if it doesn't exist
     await db.query(`
@@ -95,22 +105,29 @@ async function initializeDatabase() {
       console.log('✅ Added bus_route_name column to students table.');
     } catch (alterErr) {
       // Column likely already exists — ignore duplicate column error
-      if (!alterErr.message.includes('Duplicate column')) {
+      if (!alterErr.message?.includes('Duplicate column')) {
         console.warn('ALTER TABLE note:', alterErr.message);
       }
     }
 
     // Back-fill bus_route_name for existing rows that have empty name
-    await db.query(`
-      UPDATE students s
-      LEFT JOIN routes r ON s.bus_route_id = r.id
-      SET s.bus_route_name = COALESCE(CONCAT(r.route_code, ' - ', r.route_name), CONCAT('Route #', s.bus_route_id))
-      WHERE s.bus_route_name = '' OR s.bus_route_name IS NULL
-    `);
+    try {
+      await db.query(`
+        UPDATE students s
+        LEFT JOIN routes r ON s.bus_route_id = r.id
+        SET s.bus_route_name = COALESCE(CONCAT(r.route_code, ' - ', r.route_name), CONCAT('Route #', s.bus_route_id))
+        WHERE s.bus_route_name = '' OR s.bus_route_name IS NULL
+      `);
+    } catch (bfErr) {
+      // Ignore if table routes is empty or not yet populated
+    }
 
     console.log('✅ MySQL Database connected & `students` table verified.');
   } catch (error) {
-    console.warn('⚠️ MySQL connection note:', error.message);
+    console.error('⚠️ MySQL connection note:', error.message || error.code || error);
+    if (!rawDatabaseUrl && dbConfig.host === 'localhost') {
+      console.warn('💡 Tip: No cloud database URL detected. In Railway, add DATABASE_URL in your service Variables tab.');
+    }
   }
 }
 
@@ -118,18 +135,19 @@ async function initializeDatabase() {
 app.get('/api/health', async (req, res) => {
   try {
     const db = getPool();
-    await db.query('SELECT 1');
+    const [rows] = await db.query('SELECT DATABASE() as db, VERSION() as ver');
     res.json({
       status: 'connected',
-      database: dbConfig.database,
-      host: dbConfig.host,
+      database: rows[0]?.db || dbConfig.database,
+      host: rawDatabaseUrl ? 'railway-cluster' : dbConfig.host,
+      version: rows[0]?.ver,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
     res.status(503).json({
       status: 'disconnected',
       error: error.message,
-      hint: 'Ensure XAMPP MySQL is started and nadar_tms database is imported in phpMyAdmin.',
+      hint: 'Ensure database URL or MySQL credentials are provided in Railway Variables.',
     });
   }
 });
