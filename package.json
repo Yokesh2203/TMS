@@ -10,7 +10,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "export:db": "node scripts/export_students.js"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

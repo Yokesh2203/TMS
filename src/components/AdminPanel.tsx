@@ -275,6 +275,47 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     document.body.removeChild(link);
   };
 
+  // Export records SQL for phpMyAdmin / MySQL import
+  const handleExportSQL = () => {
+    if (students.length === 0) return;
+    const lines = [
+      '-- NSCET Transport Management System - Exported Students Dump',
+      `-- Export Date: ${new Date().toISOString()}`,
+      `-- Total Records: ${students.length}`,
+      '',
+      'CREATE TABLE IF NOT EXISTS `students` (',
+      '  `id` int(11) NOT NULL AUTO_INCREMENT,',
+      '  `student_name` varchar(150) NOT NULL,',
+      '  `identifier` varchar(50) NOT NULL,',
+      '  `institution_id` int(11) NOT NULL,',
+      '  `department_or_class` varchar(100) NOT NULL,',
+      '  `year_or_section` varchar(50) NOT NULL,',
+      '  `bus_route_id` int(11) NOT NULL,',
+      '  `bus_route_name` varchar(200) NOT NULL DEFAULT \'\',',
+      '  `stopping_name` varchar(150) NOT NULL,',
+      '  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,',
+      '  PRIMARY KEY (`id`)',
+      ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
+      '',
+      'INSERT INTO `students` (`id`, `student_name`, `identifier`, `institution_id`, `department_or_class`, `year_or_section`, `bus_route_id`, `bus_route_name`, `stopping_name`) VALUES',
+    ];
+
+    const values = students.map((s, idx) => {
+      const escape = (val: string) => (val || '').replace(/'/g, "\\'");
+      return `(${idx + 1}, '${escape(s.studentName)}', '${escape(s.identifier)}', ${s.institutionId || 1}, '${escape(s.departmentOrClass)}', '${escape(s.yearOrSection)}', ${s.busRouteId || 0}, '${escape(s.busRouteName || '')}', '${escape(s.stoppingName)}')`;
+    });
+
+    lines.push(values.join(',\n') + ';');
+
+    const sqlContent = 'data:text/sql;charset=utf-8,' + encodeURIComponent(lines.join('\n'));
+    const link = document.createElement('a');
+    link.setAttribute('href', sqlContent);
+    link.setAttribute('download', `nscet_students_dump_${new Date().toISOString().slice(0, 10)}.sql`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Export missing register numbers CSV
   const handleExportMissingCSV = () => {
     const reports = selectedDept !== 'ALL' && singleDeptGapResult
@@ -906,10 +947,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               type="button"
               onClick={handleExportCSV}
               disabled={rosterItems.length === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Download Excel / CSV spreadsheet"
             >
               <FileDown className="h-3.5 w-3.5" />
-              <span>Export CSV</span>
+              <span>Export Excel (CSV)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportSQL}
+              disabled={students.length === 0}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Download SQL dump file for phpMyAdmin / MariaDB import"
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              <span>Export SQL Dump</span>
             </button>
           </div>
         </div>
