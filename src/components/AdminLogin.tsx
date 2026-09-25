@@ -279,7 +279,8 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onCancel
                     </div>
                     <div className="rounded-lg bg-black/40 border border-rose-500/20 px-2.5 py-1.5">
                       <p className="text-xs font-bold text-rose-300">
-                        Attempt #{failCount}: If you try next attempt you are gay! 
+                        Attempt #{failCount}: If you try next attempt you are gay! (You are gay)
+                      </p>
                     </div>
                   </>
                 ) : failCount === 2 ? (
@@ -313,7 +314,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onCancel
                     </div>
                     <div className="rounded-lg bg-black/40 border border-rose-500/20 px-2.5 py-1.5">
                       <p className="text-xs font-bold text-rose-300">
-                        Attempt #1: If you try next attempt you are gay! 
+                        Attempt #1: If you try next attempt you are gay! (You are gay)
                       </p>
                     </div>
                   </>
@@ -329,10 +330,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onCancel
                   setPassword('');
                   setErrorMessage(
                     failCount >= 3
-                      ? `Attempt #${failCount} failed: i cant fuck you any more good bye! (You are guy)`
+                      ? `Attempt #${failCount} failed: i cant fuck you any more good bye! (You are gay)`
                       : failCount === 2
-                      ? `Attempt #2 failed: You are guy! If you try next attempt you are guy.`
-                      : 'Attempt #1 failed: Unauthorized access. If you try next attempt you are guy!'
+                      ? `Attempt #2 failed: You are gay! If you try next attempt you are gay.`
+                      : 'Attempt #1 failed: Unauthorized access. If you try next attempt you are gay!'
                   );
                 }}
                 className="relative w-full py-3.5 px-6 rounded-xl font-black text-sm tracking-wide text-white bg-gradient-to-r from-rose-600 via-pink-600 to-purple-600 hover:from-rose-500 hover:via-pink-500 hover:to-purple-500 shadow-[0_0_25px_rgba(244,63,94,0.45)] hover:shadow-[0_0_35px_rgba(244,63,94,0.7)] active:scale-[0.98] transition-all duration-200 cursor-pointer overflow-hidden group"
@@ -345,12 +346,12 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onCancel
                     </>
                   ) : failCount === 2 ? (
                     <>
-                      <span>Done — I am so tired of this (You are guy)</span>
+                      <span>Done — I am so tired of this (You are gay)</span>
                       <span className="text-base">💀</span>
                     </>
                   ) : (
                     <>
-                      <span>Done — I fucked up (You are guy)</span>
+                      <span>Done — I fucked up (You are gay)</span>
                       <span className="text-base">🤦‍♂️</span>
                     </>
                   )}
