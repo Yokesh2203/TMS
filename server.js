@@ -122,7 +122,29 @@ async function initializeDatabase() {
       // Ignore if table routes is empty or not yet populated
     }
 
-    console.log('✅ MySQL Database connected & `students` table verified.');
+    // Create admins table if not exists to store admin credentials securely in database
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS \`admins\` (
+        \`id\` INT(11) NOT NULL AUTO_INCREMENT,
+        \`username\` VARCHAR(100) NOT NULL UNIQUE,
+        \`password\` VARCHAR(255) NOT NULL,
+        \`name\` VARCHAR(150) NOT NULL DEFAULT 'Administrator',
+        \`role\` VARCHAR(50) NOT NULL DEFAULT 'admin',
+        \`created_at\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`updated_at\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Seed default admin in database if not already present
+    const seedUser = process.env.ADMIN_USERNAME || 'admin';
+    const seedPass = process.env.ADMIN_PASSWORD || 'admin123';
+    await db.query(`
+      INSERT INTO \`admins\` (\`username\`, \`password\`, \`name\`, \`role\`)
+      VALUES (?, ?, 'System Administrator', 'admin')
+      ON DUPLICATE KEY UPDATE \`username\` = \`username\`;
+    `, [seedUser, seedPass]);
+    console.log('✅ MySQL Database connected, `students` and `admins` tables verified.');
   } catch (error) {
     console.error('⚠️ MySQL connection note:', error.message || error.code || error);
     if (!rawDatabaseUrl && dbConfig.host === 'localhost') {
@@ -283,14 +305,9 @@ app.post('/api/students', async (req, res) => {
   }
 });
 
-// 4. Admin Authentication Endpoints
-const ADMIN_CONFIG = {
-  username: process.env.ADMIN_USERNAME || 'admin',
-  password: process.env.ADMIN_PASSWORD || 'admin123',
-};
-
+// 4. Admin Authentication Endpoints (Backed by MySQL Database)
 // Admin Login
-app.post('/api/admin/login', (req, res) => {
+app.post('/api/admin/login', async (req, res) => {
   try {
     const { username, password } = req.body || {};
     if (!username || !password) {
@@ -300,27 +317,58 @@ app.post('/api/admin/login', (req, res) => {
       });
     }
 
-    if (
-      username.trim() === ADMIN_CONFIG.username &&
-      password === ADMIN_CONFIG.password
-    ) {
-      // Create session token
+    const cleanUser = username.trim();
+    const cleanPass = password;
+
+    const db = getPool();
+    // Query admin record directly from MySQL table `admins`
+    const [rows] = await db.query(
+      'SELECT id, username, password, name, role FROM admins WHERE username = ? LIMIT 1',
+      [cleanUser]
+    );
+
+    let isAuthenticated = false;
+    let matchedUser = null;
+
+    if (rows && rows.length > 0) {
+      const adminRecord = rows[0];
+      if (adminRecord.password === cleanPass) {
+        isAuthenticated = true;
+        matchedUser = {
+          id: adminRecord.id,
+          username: adminRecord.username,
+          name: adminRecord.name || 'Administrator',
+          role: adminRecord.role || 'admin',
+        };
+      }
+    } else {
+      // Fallback check against environment variables in case table was just created
+      const fallbackUser = process.env.ADMIN_USERNAME || 'admin';
+      const fallbackPass = process.env.ADMIN_PASSWORD || 'admin123';
+      if (cleanUser === fallbackUser && cleanPass === fallbackPass) {
+        isAuthenticated = true;
+        matchedUser = {
+          id: 1,
+          username: fallbackUser,
+          name: 'Administrator',
+          role: 'admin',
+        };
+      }
+    }
+
+    if (isAuthenticated && matchedUser) {
       const sessionPayload = {
-        username: ADMIN_CONFIG.username,
-        role: 'admin',
+        username: matchedUser.username,
+        role: matchedUser.role,
         loggedInAt: new Date().toISOString(),
       };
       const token = Buffer.from(JSON.stringify(sessionPayload)).toString('base64');
 
-      console.log(`🔐 Admin "${ADMIN_CONFIG.username}" successfully logged in.`);
+      console.log(`🔐 Admin "${matchedUser.username}" verified from database & logged in.`);
       return res.json({
         success: true,
         token,
-        user: {
-          username: ADMIN_CONFIG.username,
-          name: 'Administrator',
-          role: 'admin',
-        },
+        user: matchedUser,
       });
     }
 
@@ -330,12 +378,12 @@ app.post('/api/admin/login', (req, res) => {
     });
   } catch (error) {
     console.error('Admin login error:', error);
-    res.status(500).json({ success: false, error: 'Internal server error during login.' });
+    res.status(500).json({ success: false, error: 'Database error during authentication.' });
   }
 });
 
 // Verify Admin Token
-app.get('/api/admin/verify', (req, res) => {
+app.get('/api/admin/verify', async (req, res) => {
   try {
     const authHeader = req.headers.authorization || req.headers['x-admin-token'];
     if (!authHeader) {
@@ -345,21 +393,72 @@ app.get('/api/admin/verify', (req, res) => {
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
 
-    if (decoded && decoded.role === 'admin' && decoded.username === ADMIN_CONFIG.username) {
-      return res.json({
-        success: true,
-        user: {
+    if (decoded && decoded.role === 'admin' && decoded.username) {
+      try {
+        const db = getPool();
+        const [rows] = await db.query(
+          'SELECT id, username, name, role FROM admins WHERE username = ? LIMIT 1',
+          [decoded.username]
+        );
+
+        const userRecord = rows && rows.length > 0 ? rows[0] : {
           username: decoded.username,
           name: 'Administrator',
           role: 'admin',
-          loggedInAt: decoded.loggedInAt,
-        },
-      });
+        };
+
+        return res.json({
+          success: true,
+          user: {
+            username: userRecord.username,
+            name: userRecord.name || 'Administrator',
+            role: userRecord.role || 'admin',
+            loggedInAt: decoded.loggedInAt,
+          },
+        });
+      } catch {
+        return res.json({
+          success: true,
+          user: {
+            username: decoded.username,
+            name: 'Administrator',
+            role: 'admin',
+            loggedInAt: decoded.loggedInAt,
+          },
+        });
+      }
     }
 
     return res.status(401).json({ success: false, error: 'Invalid admin session token.' });
   } catch {
     return res.status(401).json({ success: false, error: 'Malformed or expired admin session token.' });
+  }
+});
+
+// Change Admin Password in Database
+app.post('/api/admin/change-password', async (req, res) => {
+  try {
+    const { username, currentPassword, newPassword } = req.body || {};
+    if (!username || !currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, error: 'Missing required credentials.' });
+    }
+
+    const db = getPool();
+    const [rows] = await db.query(
+      'SELECT id, password FROM admins WHERE username = ? LIMIT 1',
+      [username.trim()]
+    );
+
+    if (!rows || rows.length === 0 || rows[0].password !== currentPassword) {
+      return res.status(401).json({ success: false, error: 'Current password is incorrect.' });
+    }
+
+    await db.query('UPDATE admins SET password = ? WHERE id = ?', [newPassword, rows[0].id]);
+    console.log(`🔑 Password updated in database for admin "${username}".`);
+    res.json({ success: true, message: 'Password updated successfully in database.' });
+  } catch (error) {
+    console.error('Error changing admin password:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

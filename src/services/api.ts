@@ -128,13 +128,9 @@ export async function saveStudentToDb(
 }
 
 // ==========================================
-// 4. Admin Authentication Services
+// 4. Admin Authentication Services (Server-Side Verified)
 // ==========================================
 const ADMIN_AUTH_KEY = 'nadar_tms_admin_session_v1';
-
-// Default fallback credentials if backend is in local fallback mode
-const DEFAULT_ADMIN_USER = 'admin';
-const DEFAULT_ADMIN_PASS = 'admin123';
 
 export function getStoredAdminAuth(): { isAuthenticated: boolean; user: any | null; token: string | null } {
   try {
@@ -167,7 +163,7 @@ export async function adminLogin(
     return { success: false, error: 'Please enter both username and password.' };
   }
 
-  // 1. Try Backend API
+  // Pure Server-Side Verification: passwords are NEVER exposed in frontend code!
   try {
     const res = await fetch(`${API_BASE}/api/admin/login`, {
       method: 'POST',
@@ -190,35 +186,17 @@ export async function adminLogin(
         return { success: true, user: data.user, token: data.token };
       }
       return { success: false, error: data.error || 'Authentication failed' };
-    } else if (res.status === 401) {
+    } else {
       const data = await res.json().catch(() => ({}));
       return { success: false, error: data.error || 'Invalid administrator username or password.' };
     }
   } catch (err) {
-    console.warn('Backend server offline during admin login, checking credentials fallback:', err);
-  }
-
-  // 2. Offline / Local fallback validation
-  if (cleanUser === DEFAULT_ADMIN_USER && cleanPass === DEFAULT_ADMIN_PASS) {
-    const fallbackUser = {
-      username: DEFAULT_ADMIN_USER,
-      name: 'System Administrator',
-      role: 'admin',
+    console.warn('Backend server offline during admin login:', err);
+    return {
+      success: false,
+      error: 'Cannot reach security authentication server. Please ensure the backend is running.',
     };
-    const fallbackToken = btoa(JSON.stringify({ username: DEFAULT_ADMIN_USER, role: 'admin', t: Date.now() }));
-    const sessionData = {
-      user: fallbackUser,
-      token: fallbackToken,
-      savedAt: new Date().toISOString(),
-    };
-    sessionStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify(sessionData));
-    if (rememberMe) {
-      localStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify(sessionData));
-    }
-    return { success: true, user: fallbackUser, token: fallbackToken };
   }
-
-  return { success: false, error: 'Invalid administrator credentials. Please check your username and password.' };
 }
 
 export function adminLogout(): void {

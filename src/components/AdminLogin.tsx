@@ -167,8 +167,9 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onCancel
               <span>Remember session</span>
             </label>
 
-            <span className="text-[11px] text-indigo-600 font-medium bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
-              Default: admin / admin123
+            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+              <Lock className="w-3 h-3 text-slate-400" />
+              <span>Protected portal</span>
             </span>
           </div>
 
