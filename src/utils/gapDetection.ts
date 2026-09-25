@@ -1,3 +1,66 @@
+export interface RollNumberInfo {
+  rollNo: number;
+  prefix: string;
+  padLength: number;
+  raw: string;
+}
+
+/**
+ * Extracts the roll number / serial number from an Anna University or standard register number.
+ * e.g. 921023243026 -> rollNo: 26, prefix: "921023243", padLength: 3
+ * e.g. 921023106001 -> rollNo: 1, prefix: "921023106", padLength: 3
+ */
+export function extractRollNumber(rawIdentifier: string): RollNumberInfo | null {
+  const clean = (rawIdentifier || '').trim();
+  if (!clean) return null;
+
+  // 1. Standard Anna University 12-digit format
+  if (/^\d{12}$/.test(clean)) {
+    const prefix = clean.slice(0, 9);
+    const rollSeqStr = clean.slice(9);
+    const num = parseInt(rollSeqStr, 10);
+    if (!isNaN(num)) {
+      return {
+        rollNo: num,
+        prefix,
+        padLength: 3,
+        raw: clean,
+      };
+    }
+  }
+
+  // 2. Generic fully numeric identifier (>= 6 digits)
+  if (/^\d{6,}$/.test(clean)) {
+    const prefix = clean.slice(0, -3);
+    const rollSeqStr = clean.slice(-3);
+    const num = parseInt(rollSeqStr, 10);
+    if (!isNaN(num)) {
+      return {
+        rollNo: num,
+        prefix,
+        padLength: 3,
+        raw: clean,
+      };
+    }
+  }
+
+  // 3. Alphanumeric format ending in 1 to 4 digits e.g. "NSCET-026"
+  const match = clean.match(/^(.*?)(\d{1,4})$/);
+  if (match) {
+    const num = parseInt(match[2], 10);
+    if (!isNaN(num)) {
+      return {
+        rollNo: num,
+        prefix: match[1],
+        padLength: match[2].length,
+        raw: clean,
+      };
+    }
+  }
+
+  return null;
+}
+
 export interface GapDetectionResult {
   totalSubmitted: number;
   minRegisterNumber: string | null;
@@ -17,12 +80,9 @@ interface ParsedRegisterNumber {
 }
 
 /**
- * Detects missing register numbers strictly between the minimum and maximum submitted register numbers.
- * Rules:
- * 1. Sort register numbers in ascending order.
- * 2. Only find gaps between the first (min) and last (max) submitted register numbers.
- * 3. Never assume total student strength.
- * 4. Never generate numbers after the last submitted record.
+ * Detects missing register numbers starting from 001 (roll number 1) up to the maximum submitted register number.
+ * College engineering register series always begin at ...001.
+ * e.g. If student 921023243026 is submitted, missing are 921023243001 to 921023243025 (25 missing).
  */
 export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionResult {
   const cleaned = identifiers
@@ -46,12 +106,10 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
 
   for (const raw of cleaned) {
     // 1. Standard Anna University 12-digit engineering register number:
-    // Format: [College 4 digits][Batch/Year 2 digits][Dept Code 3 digits][Roll No 3 digits]
-    // e.g. 9210 23 243 001 (AD) vs 9210 23 105 001 (IT)
     if (/^\d{12}$/.test(raw)) {
       try {
-        const seriesPrefix = raw.slice(0, 9); // e.g. 921023243 or 921023105
-        const rollSeqStr = raw.slice(9);      // e.g. 001 to 026
+        const seriesPrefix = raw.slice(0, 9);
+        const rollSeqStr = raw.slice(9);
         parsedItems.push({
           raw,
           prefix: seriesPrefix,
@@ -65,10 +123,9 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
       }
     }
 
-    // 2. Generic fully numeric identifier (e.g. 6 to 11 digits)
+    // 2. Generic fully numeric identifier (>= 6 digits)
     if (/^\d+$/.test(raw)) {
       try {
-        // If length >= 6, use the leading digits as prefix and last 3 digits as roll number
         if (raw.length >= 6) {
           const seriesPrefix = raw.slice(0, raw.length - 3);
           const rollSeqStr = raw.slice(raw.length - 3);
@@ -123,7 +180,6 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
   }
 
   // Deduplicate and sort in ascending order
-  // Sort by prefix first, then numericVal, then suffix
   parsedItems.sort((a, b) => {
     if (a.prefix !== b.prefix) {
       return a.prefix.localeCompare(b.prefix);
@@ -134,7 +190,6 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
     return a.suffix.localeCompare(b.suffix);
   });
 
-  // Remove exact duplicates in sorted list
   const uniqueItems: ParsedRegisterNumber[] = [];
   const seenRaws = new Set<string>();
   for (const item of parsedItems) {
@@ -148,44 +203,44 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
   const minRegisterNumber = sortedSubmitted[0] || null;
   const maxRegisterNumber = sortedSubmitted[sortedSubmitted.length - 1] || null;
 
-  if (uniqueItems.length <= 1) {
-    return {
-      totalSubmitted: uniqueItems.length,
-      minRegisterNumber,
-      maxRegisterNumber,
-      missingCount: 0,
-      missingNumbers: [],
-      sortedSubmitted,
-      hasGaps: false,
-    };
+  // Group by prefix and suffix to evaluate each series from 001 up to max submitted
+  const prefixGroups = new Map<string, ParsedRegisterNumber[]>();
+  for (const item of uniqueItems) {
+    const groupKey = `${item.prefix}___${item.suffix}`;
+    if (!prefixGroups.has(groupKey)) {
+      prefixGroups.set(groupKey, []);
+    }
+    prefixGroups.get(groupKey)!.push(item);
   }
 
   const missingNumbers: string[] = [];
-  const MAX_REPORTABLE_GAPS = 5000; // Safeguard against massive accidental gaps
+  const MAX_REPORTABLE_GAPS = 5000;
 
-  // Find gaps strictly between consecutive records WITHIN THE SAME SERIES/PREFIX
-  // (Never compares gaps across different department series prefixes)
-  for (let i = 0; i < uniqueItems.length - 1; i++) {
-    const current = uniqueItems[i];
-    const next = uniqueItems[i + 1];
+  for (const [, items] of prefixGroups.entries()) {
+    items.sort((a, b) => (a.numericVal < b.numericVal ? -1 : 1));
+    const submittedSet = new Set<bigint>(items.map((x) => x.numericVal));
+    const maxVal = items[items.length - 1].numericVal;
+    const minVal = items[0].numericVal;
+    const sample = items[0];
 
-    // ONLY compare if the department/series prefix matches exactly!
-    if (current.prefix === next.prefix && current.suffix === next.suffix) {
-      const diff = next.numericVal - current.numericVal;
+    // Determine the base starting number for this college series:
+    // Regular students start at roll number 1 (001).
+    // Lateral entry students typically start at 301.
+    let startVal = 1n;
+    if (minVal >= 301n && minVal <= 399n) {
+      startVal = 301n;
+    } else if (minVal > 1000n) {
+      startVal = minVal;
+    }
 
-      if (diff > 1n) {
-        // There is a gap between current and next within the same department series
-        const gapSize = diff - 1n;
-        const loopCount = gapSize > BigInt(MAX_REPORTABLE_GAPS) ? BigInt(MAX_REPORTABLE_GAPS) : gapSize;
+    // Check all roll numbers from startVal up to maxVal
+    for (let currentVal = startVal; currentVal <= maxVal; currentVal++) {
+      if (!submittedSet.has(currentVal)) {
+        const formattedNum = currentVal.toString().padStart(sample.padLength, '0');
+        const missingFull = `${sample.prefix}${formattedNum}${sample.suffix}`;
+        missingNumbers.push(missingFull);
 
-        for (let step = 1n; step <= loopCount; step++) {
-          const missingVal = current.numericVal + step;
-          const formattedNum = missingVal.toString().padStart(current.padLength, '0');
-          const missingFull = `${current.prefix}${formattedNum}${current.suffix}`;
-          missingNumbers.push(missingFull);
-
-          if (missingNumbers.length >= MAX_REPORTABLE_GAPS) break;
-        }
+        if (missingNumbers.length >= MAX_REPORTABLE_GAPS) break;
       }
     }
   }

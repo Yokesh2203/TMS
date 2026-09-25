@@ -21,6 +21,7 @@ import {
 import {
   detectRegisterNumberGaps,
   detectDepartmentGaps,
+  extractRollNumber,
 } from '../utils/gapDetection';
 
 // Persists which DEPARTMENTS have been manually verified by admin
@@ -47,6 +48,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [copiedText, setCopiedText] = useState<string | null>(null);
+
+  // Table roster view: 'all_slots' (shows 1 to Max with missing slots), 'submitted', or 'missing'
+  const [tableRosterView, setTableRosterView] = useState<'all_slots' | 'submitted' | 'missing'>('all_slots');
 
   // Department-level verification state (Set of department names verified by admin)
   const [verifiedDepts, setVerifiedDepts] = useState<Set<string>>(() => {
@@ -164,25 +168,102 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return verifiedDepts.has(deptName) && !gap.hasGaps;
   };
 
+  // Combine submitted students with missing register numbers for a complete S.No / Roll Number roster
+  const rosterItems = useMemo(() => {
+    // Determine which missing numbers belong to current department/filter
+    const missingList = selectedDept === 'ALL'
+      ? departmentGapAnalysis.allMissingNumbers
+      : (singleDeptGapResult?.missingNumbers || []);
+
+    const submittedItems = sortedStudents.map((s, idx) => {
+      const rollInfo = extractRollNumber(s.identifier);
+      return {
+        key: s.id || `sub-${s.identifier}-${idx}`,
+        sNo: rollInfo ? rollInfo.rollNo : idx + 1,
+        identifier: s.identifier,
+        studentName: s.studentName,
+        departmentOrClass: s.departmentOrClass,
+        yearOrSection: s.yearOrSection,
+        busRouteId: s.busRouteId,
+        busRouteName: s.busRouteName,
+        stoppingName: s.stoppingName,
+        isSubmitted: true,
+      };
+    });
+
+    // If search query is entered, only show matching submitted records
+    if (searchQuery.trim()) {
+      return submittedItems;
+    }
+
+    const missingRows = missingList.map((missingId) => {
+      const rollInfo = extractRollNumber(missingId);
+      return {
+        key: `missing-${missingId}`,
+        sNo: rollInfo ? rollInfo.rollNo : 0,
+        identifier: missingId,
+        studentName: 'Not Submitted',
+        departmentOrClass: selectedDept === 'ALL' ? 'Unassigned' : selectedDept,
+        yearOrSection: selectedYear === 'ALL' ? '-' : selectedYear,
+        busRouteId: '-',
+        busRouteName: '-',
+        stoppingName: '-',
+        isSubmitted: false,
+      };
+    });
+
+    let allCombined = [...submittedItems, ...missingRows];
+    allCombined.sort((a, b) => {
+      if (a.sNo !== b.sNo && a.sNo !== 0 && b.sNo !== 0) {
+        return sortOrder === 'asc' ? a.sNo - b.sNo : b.sNo - a.sNo;
+      }
+      return sortOrder === 'asc'
+        ? a.identifier.localeCompare(b.identifier, undefined, { numeric: true })
+        : b.identifier.localeCompare(a.identifier, undefined, { numeric: true });
+    });
+
+    if (tableRosterView === 'submitted') {
+      return allCombined.filter((x) => x.isSubmitted);
+    }
+    if (tableRosterView === 'missing') {
+      return allCombined.filter((x) => !x.isSubmitted);
+    }
+    return allCombined;
+  }, [sortedStudents, searchQuery, selectedDept, departmentGapAnalysis, singleDeptGapResult, selectedYear, sortOrder, tableRosterView]);
+
+  const submittedCount = sortedStudents.length;
+  const missingCount = useMemo(() => {
+    if (selectedDept === 'ALL') {
+      return departmentGapAnalysis.totalMissingCount;
+    }
+    return singleDeptGapResult?.missingCount || 0;
+  }, [selectedDept, departmentGapAnalysis, singleDeptGapResult]);
+  const totalRosterCount = submittedCount + missingCount;
+
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     setCopiedText(label);
     setTimeout(() => setCopiedText(null), 2500);
   };
 
-  // Export submitted records CSV
+  // Export records CSV (exports current roster view including S.No)
   const handleExportCSV = () => {
-    if (sortedStudents.length === 0) return;
-    const headers = ['Register Number', 'Student Name', 'Department', 'Year of Study', 'Bus Route', 'Boarding Stop', 'Submission Date'];
-    const rows = sortedStudents.map((s) => [
-      `"${s.identifier}"`, `"${s.studentName}"`, `"${s.departmentOrClass}"`,
-      `"${s.yearOrSection}"`, `"${s.busRouteName}"`, `"${s.stoppingName}"`,
-      `"${new Date(s.createdAt).toLocaleString()}"`,
+    if (rosterItems.length === 0) return;
+    const headers = ['S.No', 'Register Number', 'Student Name', 'Department', 'Year of Study', 'Bus Route', 'Boarding Stop', 'Status'];
+    const rows = rosterItems.map((item) => [
+      `"${item.sNo > 0 ? item.sNo : ''}"`,
+      `"${item.identifier}"`,
+      `"${item.studentName}"`,
+      `"${item.departmentOrClass}"`,
+      `"${item.yearOrSection}"`,
+      `"${item.busRouteName}"`,
+      `"${item.stoppingName}"`,
+      `"${item.isSubmitted ? 'Submitted' : 'Not Submitted'}"`,
     ]);
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
     const link = document.createElement('a');
     link.setAttribute('href', encodeURI(csvContent));
-    link.setAttribute('download', `nscet_students.csv`);
+    link.setAttribute('download', `nscet_students_register.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -529,14 +610,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               {/* Gap content */}
-              {singleDeptGapResult.totalSubmitted <= 1 ? (
+              {singleDeptGapResult.totalSubmitted === 0 ? (
                 <div className="py-6 text-center text-slate-500 text-xs">
-                  {singleDeptGapResult.totalSubmitted === 0
-                    ? 'No submitted records for this department.'
-                    : 'Only 1 record. Need at least 2 to detect gaps.'}
+                  No submitted records for this department yet.
                 </div>
               ) : singleDeptGapResult.hasGaps ? (
                 <div className="overflow-hidden border border-slate-200 rounded-2xl shadow-xs">
+                  <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-bold text-slate-700 text-xs">
+                      {singleDeptGapResult.missingCount} Students Not Yet Submitted (Pending from S.No 1)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(singleDeptGapResult.missingNumbers.join('\n'));
+                        setCopiedText('DEPT_MISSING');
+                        setTimeout(() => setCopiedText(null), 2000);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer shadow-xs"
+                    >
+                      {copiedText === 'DEPT_MISSING' ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                      <span>{copiedText === 'DEPT_MISSING' ? 'Copied All!' : 'Copy Missing Register Numbers'}</span>
+                    </button>
+                  </div>
                   <div className="max-h-64 overflow-y-auto">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600">
@@ -544,20 +640,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <th className="py-2.5 px-4 w-16">S.No</th>
                           <th className="py-2.5 px-4">Missing Register Number</th>
                           <th className="py-2.5 px-4">Department</th>
+                          <th className="py-2.5 px-4">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
-                        {singleDeptGapResult.missingNumbers.map((missingId, index) => (
-                          <tr key={missingId} className="hover:bg-rose-50/30 transition-colors group">
-                            <td className="py-2.5 px-4 font-mono text-slate-500">{index + 1}</td>
-                            <td className="py-2.5 px-4 font-mono font-bold text-rose-700 whitespace-nowrap">{missingId}</td>
-                            <td className="py-2.5 px-4 whitespace-nowrap">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                {getDeptShortCode(selectedDept)}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
+                        {singleDeptGapResult.missingNumbers.map((missingId) => {
+                          const roll = extractRollNumber(missingId);
+                          return (
+                            <tr key={missingId} className="hover:bg-rose-50/30 transition-colors group">
+                              <td className="py-2.5 px-4 font-mono font-bold text-slate-600">#{roll ? roll.rollNo : '-'}</td>
+                              <td className="py-2.5 px-4 font-mono font-bold text-rose-700 whitespace-nowrap">{missingId}</td>
+                              <td className="py-2.5 px-4 whitespace-nowrap">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                  {getDeptShortCode(selectedDept)}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-4 whitespace-nowrap">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
+                                  Not Submitted
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -567,8 +672,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
                   <div className="text-xs">
                     <span className="font-bold">Continuous Sequence: </span>
-                    All submitted register numbers between <strong>{singleDeptGapResult.minRegisterNumber}</strong> and{' '}
-                    <strong>{singleDeptGapResult.maxRegisterNumber}</strong> are consecutive.
+                    All submitted register numbers starting from <strong>{singleDeptGapResult.minRegisterNumber}</strong> up to{' '}
+                    <strong>{singleDeptGapResult.maxRegisterNumber}</strong> are consecutive with no missing students.
                     {!isVerified && (
                       <span className="ml-1 text-emerald-700 font-semibold">Click "Mark as Verified" above to confirm.</span>
                     )}
@@ -709,16 +814,70 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         )}
       </div>
 
-      {/* Submitted Records Table — no per-row checkboxes, clean view */}
+      {/* Student Records Table with S.No Roster View */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <div className="p-4 sm:px-6 sm:py-4 border-b border-slate-200/80 bg-slate-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <h3 className="text-sm sm:text-base font-bold text-slate-900">Submitted Student Records</h3>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-200 text-slate-800">
-              {sortedStudents.length} Records
-            </span>
+        <div className="p-4 sm:px-6 sm:py-4 border-b border-slate-200/80 bg-slate-50/60 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <h3 className="text-sm sm:text-base font-bold text-slate-900">Student Register</h3>
+            
+            {/* View Filter: All Slots vs Submitted Only vs Not Submitted */}
+            <div className="inline-flex items-center bg-slate-200/70 p-0.5 rounded-xl text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setTableRosterView('all_slots')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  tableRosterView === 'all_slots'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                All Slots ({totalRosterCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTableRosterView('submitted')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  tableRosterView === 'submitted'
+                    ? 'bg-white text-emerald-800 shadow-xs'
+                    : 'text-slate-600 hover:text-emerald-700'
+                }`}
+              >
+                Submitted ({submittedCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTableRosterView('missing')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  tableRosterView === 'missing'
+                    ? 'bg-white text-rose-700 shadow-xs'
+                    : 'text-slate-600 hover:text-rose-700'
+                }`}
+              >
+                Not Submitted ({missingCount})
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex flex-wrap items-center gap-2">
+            {missingCount > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const missingList = selectedDept === 'ALL'
+                    ? departmentGapAnalysis.allMissingNumbers
+                    : (singleDeptGapResult?.missingNumbers || []);
+                  navigator.clipboard.writeText(missingList.join('\n'));
+                  setCopiedText('COPY_TABLE_MISSING');
+                  setTimeout(() => setCopiedText(null), 2000);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-rose-700 border border-rose-200 shadow-xs transition-all cursor-pointer"
+                title="Copy unsubmitted register numbers"
+              >
+                {copiedText === 'COPY_TABLE_MISSING' ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                <span>{copiedText === 'COPY_TABLE_MISSING' ? 'Copied!' : `Copy ${missingCount} Missing IDs`}</span>
+              </button>
+            )}
+
             {onRefreshStudents && (
               <button
                 type="button"
@@ -731,10 +890,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <span>Refresh</span>
               </button>
             )}
+
             <button
               type="button"
               onClick={handleExportCSV}
-              disabled={sortedStudents.length === 0}
+              disabled={rosterItems.length === 0}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <FileDown className="h-3.5 w-3.5" />
@@ -747,38 +907,57 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                <th className="py-3.5 px-4">#</th>
+                <th className="py-3.5 px-4 w-16">S.No</th>
                 <th className="py-3.5 px-4">Register Number</th>
                 <th className="py-3.5 px-4">Student Name</th>
                 <th className="py-3.5 px-4">Department &amp; Year</th>
                 <th className="py-3.5 px-4">Bus Route</th>
                 <th className="py-3.5 px-4">Boarding Stop</th>
+                <th className="py-3.5 px-4">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {sortedStudents.length === 0 ? (
+              {rosterItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     <p className="text-sm font-medium text-slate-600">No student records found</p>
                     <p className="text-xs mt-1">Try selecting a different department or clearing search filters</p>
                   </td>
                 </tr>
               ) : (
-                sortedStudents.map((s, idx) => (
-                  <tr key={s.id || idx} className="hover:bg-slate-50/70 transition-colors group">
-                    <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                rosterItems.map((item) => (
+                  <tr
+                    key={item.key}
+                    className={`transition-colors group ${
+                      item.isSubmitted
+                        ? 'hover:bg-slate-50/70 bg-white'
+                        : 'bg-rose-50/25 hover:bg-rose-50/50'
+                    }`}
+                  >
+                    {/* S.No / Roll Number */}
+                    <td className="py-3 px-4 font-mono font-bold text-xs whitespace-nowrap">
+                      <span className={item.isSubmitted ? 'text-indigo-900 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/60' : 'text-slate-400 px-2'}>
+                        #{item.sNo > 0 ? item.sNo : '-'}
+                      </span>
+                    </td>
+
+                    {/* Register Number */}
                     <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
-                        <span className="px-2 py-0.5 rounded border bg-slate-100 text-slate-800 border-slate-200/80">
-                          {s.identifier}
+                        <span className={`px-2 py-0.5 rounded border ${
+                          item.isSubmitted
+                            ? 'bg-slate-100 text-slate-900 border-slate-200/80 font-bold'
+                            : 'bg-rose-100/50 text-rose-800 border-rose-200'
+                        }`}>
+                          {item.identifier}
                         </span>
                         <button
                           type="button"
-                          onClick={() => handleCopy(s.identifier, s.identifier)}
+                          onClick={() => handleCopy(item.identifier, item.identifier)}
                           className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-600 p-0.5 rounded transition-opacity cursor-pointer"
                           title="Copy Register Number"
                         >
-                          {copiedText === s.identifier ? (
+                          {copiedText === item.identifier ? (
                             <Check className="h-3 w-3 text-emerald-600" />
                           ) : (
                             <Copy className="h-3 w-3" />
@@ -786,25 +965,66 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </button>
                       </div>
                     </td>
-                    <td className="py-3 px-4 font-semibold text-slate-800 whitespace-nowrap">{s.studentName}</td>
+
+                    {/* Student Name */}
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      {item.isSubmitted ? (
+                        <span className="font-semibold text-slate-900">{item.studentName}</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-rose-500 font-medium italic text-xs">
+                          Not Submitted
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Department & Year */}
                     <td className="py-3 px-4 whitespace-nowrap">
                       <div className="flex items-center gap-1.5 font-medium text-slate-800">
-                        <span>{getDeptShortCode(s.departmentOrClass)}</span>
+                        <span>{getDeptShortCode(item.departmentOrClass)}</span>
                       </div>
-                      <div className="text-[11px] text-slate-500 font-semibold">{s.yearOrSection}</div>
+                      {item.isSubmitted && item.yearOrSection && (
+                        <div className="text-[11px] text-slate-500 font-semibold">{item.yearOrSection}</div>
+                      )}
                     </td>
+
+                    {/* Bus Route */}
                     <td className="py-3 px-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 text-slate-700">
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700 mr-1">
-                          Route {s.busRouteId}
+                      {item.isSubmitted && item.busRouteName !== '-' ? (
+                        <div className="flex items-center gap-1.5 text-slate-700">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700 mr-1">
+                            Route {item.busRouteId}
+                          </span>
+                          <span className="font-medium truncate max-w-[160px]" title={item.busRouteName}>{item.busRouteName}</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+
+                    {/* Boarding Stop */}
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      {item.isSubmitted && item.stoppingName !== '-' ? (
+                        <div className="flex items-center gap-1.5 text-slate-700">
+                          <span className="font-medium truncate max-w-[160px]" title={item.stoppingName}>{item.stoppingName}</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+
+                    {/* Status Pill */}
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      {item.isSubmitted ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                          Submitted
                         </span>
-                        <span className="font-medium truncate max-w-[160px]" title={s.busRouteName}>{s.busRouteName}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 text-slate-700">
-                        <span className="font-medium truncate max-w-[160px]" title={s.stoppingName}>{s.stoppingName}</span>
-                      </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100/70 text-rose-700 border border-rose-200">
+                          <AlertTriangle className="h-3 w-3 text-rose-500" />
+                          Pending
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))
