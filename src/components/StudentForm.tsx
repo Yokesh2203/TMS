@@ -446,27 +446,27 @@ export const StudentForm: React.FC<StudentFormProps> = ({
       {/* Main Student Entry Card */}
       <div
         id="student-data-entry-card"
-        className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden transition-all"
+        className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden transition-all"
       >
         {/* Card Header */}
-        <div className="px-6 sm:px-8 py-6 border-b border-slate-100 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white">
+        <div className="px-4 sm:px-8 py-4 sm:py-6 border-b border-slate-100 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white">
           <div className="flex items-center gap-3">
-            <span className="h-10 w-10 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 flex items-center justify-center text-xs font-semibold shadow-xs">
+            <span className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 flex items-center justify-center text-xs font-semibold shadow-xs shrink-0">
               <GraduationCap className="h-5 w-5 text-indigo-300" />
             </span>
-            <div>
-              <h2 className="text-lg font-bold tracking-tight text-white">
-                NSCET Student Registration & Bus Allocation
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-bold tracking-tight text-white leading-tight">
+                NSCET Student Registration &amp; Bus Allocation
               </h2>
-              <p className="text-xs text-slate-300 mt-0.5">
-                Nadar Saraswathi College of Engineering & Technology — Transit Enrollment Portal
+              <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5 truncate sm:overflow-visible">
+                Nadar Saraswathi College of Engineering &amp; Technology — Transit Portal
               </p>
             </div>
           </div>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-7">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-7">
           {/* SECTION 1: Academic Profile */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -693,27 +693,27 @@ export const StudentForm: React.FC<StudentFormProps> = ({
             </div>
 
             {/* Quick Stop & Route Finder Search Bar with Search Button */}
-            <div className="bg-gradient-to-r from-indigo-50/70 via-blue-50/50 to-slate-50 border border-indigo-100/80 rounded-2xl p-3.5 sm:p-4 space-y-2.5" ref={searchContainerRef}>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div className="bg-gradient-to-r from-indigo-50/70 via-blue-50/50 to-slate-50 border border-indigo-100/80 rounded-2xl p-3 sm:p-4 space-y-2" ref={searchContainerRef}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                 <label
                   htmlFor="stop-search-input"
                   className="text-xs font-semibold text-indigo-950 flex items-center gap-1.5"
                 >
-                  <Search className="h-3.5 w-3.5 text-indigo-600" />
-                  <span>Don't know your route name? Search by Stop or Village:</span>
+                  <Search className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                  <span>Don't know your route? Search your stop:</span>
                 </label>
-                <span className="text-[11px] text-indigo-600 font-medium">
-                  {allUniqueStops.length} stops & {BUS_ROUTES.length} Engineering routes (Route 101 – 121)
+                <span className="text-[10px] sm:text-[11px] text-indigo-700 font-semibold bg-indigo-100/70 px-2 py-0.5 rounded-full self-start sm:self-auto">
+                  {allUniqueStops.length} stops • {BUS_ROUTES.length} routes
                 </span>
               </div>
 
               <div className="relative">
                 <div className="flex gap-2">
-                  <div className="relative flex-1">
+                  <div className="relative flex-1 min-w-0">
                     <input
                       type="text"
                       id="stop-search-input"
-                      placeholder="Type stop name (e.g. Park Stop, Aranmanai, G.H, Theni, Chinnamanur, Cumbum, Bodi)..."
+                      placeholder="Search stop (e.g. Park Stop, Bodi, Theni)..."
                       value={stopSearchQuery}
                       onChange={(e) => {
                         setStopSearchQuery(e.target.value);
@@ -721,9 +721,9 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                       }}
                       onKeyDown={handleSearchKeyDown}
                       onFocus={() => setIsSearchOpen(true)}
-                      className="w-full pl-10 pr-9 py-2.5 text-sm bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-500 transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
+                      className="w-full pl-9 pr-8 py-2.5 text-sm bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-500 transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
                     />
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-indigo-500">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-indigo-500">
                       <Search className="h-4 w-4" />
                     </div>
                     {stopSearchQuery && (
@@ -733,7 +733,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                           setStopSearchQuery('');
                           setIsSearchOpen(false);
                         }}
-                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        className="absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
                       >
                         <X className="h-4 w-4" />
                       </button>
@@ -744,16 +744,16 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                     type="button"
                     id="search-stop-btn"
                     onClick={() => setIsSearchOpen((prev) => !prev)}
-                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl text-sm font-semibold shadow-xs hover:shadow transition-all shrink-0 cursor-pointer"
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl text-sm font-semibold shadow-xs hover:shadow transition-all shrink-0 cursor-pointer min-w-[76px] sm:min-w-0"
                   >
-                    <Search className="h-4 w-4" />
-                    <span className="hidden sm:inline">Search</span> Stop
+                    <Search className="h-4 w-4 shrink-0" />
+                    <span>Search</span>
                   </button>
                 </div>
 
                 {/* Search Results Popover */}
                 {isSearchOpen && (
-                  <div className="absolute z-30 left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-indigo-100 max-h-72 overflow-y-auto divide-y divide-slate-100 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="absolute z-30 left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-indigo-100 max-h-56 sm:max-h-72 overflow-y-auto overscroll-contain divide-y divide-slate-100 animate-in fade-in zoom-in-95 duration-150">
                     {searchResults.length > 0 ? (
                       <div>
                         <div className="p-2.5 bg-indigo-50/60 text-[11px] font-semibold text-indigo-900 flex items-center justify-between sticky top-0 z-10 border-b border-indigo-100">
@@ -882,14 +882,14 @@ export const StudentForm: React.FC<StudentFormProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
               {/* Bus Route Dropdown */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
                   <label
                     htmlFor="bus-route-select"
                     className="block text-xs font-medium text-slate-700"
                   >
                     Bus Route <span className="text-rose-500">*</span>
                   </label>
-                  <span className="text-[11px] text-slate-500 font-medium">
+                  <span className="text-[10px] sm:text-[11px] text-slate-500 font-medium">
                     {BUS_ROUTES.length} Engineering routes (101 – 121)
                   </span>
                 </div>
@@ -925,14 +925,14 @@ export const StudentForm: React.FC<StudentFormProps> = ({
 
               {/* Stopping Name Dropdown */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
                   <label
                     htmlFor="stopping-name-select"
                     className="block text-xs font-medium text-slate-700"
                   >
                     Boarding Stop <span className="text-rose-500">*</span>
                   </label>
-                  <span className="text-[11px] text-indigo-700 font-medium">
+                  <span className="text-[10px] sm:text-[11px] text-indigo-700 font-medium">
                     {formData.busRouteId
                       ? `${availableStops.length} stops on this route`
                       : `${allUniqueStops.length} all stops (select directly)`}
@@ -986,24 +986,24 @@ export const StudentForm: React.FC<StudentFormProps> = ({
           </div>
 
           {/* Form Actions */}
-          <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="pt-4 border-t border-slate-100">
+            <div className="flex flex-row items-center gap-2.5 sm:gap-3 w-full">
               <button
                 type="submit"
                 id="save-student-btn"
                 disabled={isSubmitting}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer disabled:opacity-50"
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl font-semibold text-sm text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer disabled:opacity-50"
               >
-                <Database className="h-4 w-4" />
+                <Database className="h-4 w-4 shrink-0" />
                 <span>Submit</span>
-                <ArrowRight className="h-3.5 w-3.5 ml-0.5" />
+                <ArrowRight className="h-3.5 w-3.5 ml-0.5 shrink-0" />
               </button>
 
               <button
                 type="button"
                 id="clear-form-btn"
                 onClick={handleReset}
-                className="w-full sm:w-auto px-4 py-3 rounded-xl font-medium text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+                className="flex-1 sm:flex-initial sm:px-6 py-3 rounded-xl font-medium text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer text-center"
               >
                 Clear Form
               </button>

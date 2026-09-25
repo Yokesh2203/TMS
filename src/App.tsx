@@ -107,7 +107,7 @@ function AppContent() {
           element={
             <>
               <Header dbStatus={dbStatus} />
-              <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
+              <main className="flex-1 max-w-6xl w-full mx-auto px-2.5 sm:px-6 py-3 sm:py-8">
                 <div className="max-w-4xl mx-auto">
                   <StudentForm
                     onSaveStudent={handleSaveStudent}
@@ -130,7 +130,7 @@ function AppContent() {
             ) : (
               <>
                 <Header dbStatus={dbStatus} />
-                <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
+                <main className="flex-1 max-w-6xl w-full mx-auto px-2.5 sm:px-6 py-3 sm:py-8">
                   <AdminLogin
                     onLoginSuccess={handleLoginSuccess}
                     onCancel={() => navigate('/')}

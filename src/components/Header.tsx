@@ -18,32 +18,32 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   return (
     <header className="bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-2xs">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between py-3.5 sm:py-4 gap-3.5">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between py-2.5 sm:py-4 gap-2.5">
           {/* Logo & Title */}
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs shrink-0">
-              <Bus className="h-5 w-5 text-sky-400" />
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs shrink-0">
+              <Bus className="h-4 w-4 sm:h-5 sm:w-5 text-sky-400" />
             </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900">
-                  Nadar Saraswathi College of Engineering and Technology Transport Portal
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h1 className="text-sm sm:text-base md:text-lg font-bold tracking-tight text-slate-900 leading-tight">
+                  NSCET Transport Portal
                 </h1>
                 {dbStatus?.connected ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                     MySQL Connected
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-100/80 text-amber-800 border border-amber-200">
-                    <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-medium bg-amber-100/80 text-amber-800 border border-amber-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
                     Local Storage
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Nadar Saraswathi College of Engineering & Technology (NSCET)
+              <p className="text-[11px] sm:text-xs text-slate-500 truncate mt-0.5">
+                Nadar Saraswathi College of Engineering & Technology
               </p>
             </div>
           </div>
