@@ -78,6 +78,7 @@ export async function checkIdentifierAvailability(identifier: string): Promise<{
   studentName?: string;
   busRouteName?: string;
   stoppingName?: string;
+  isHostel?: boolean;
   message?: string;
   offline?: boolean;
 }> {

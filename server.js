@@ -88,9 +88,10 @@ async function initializeDatabase() {
         \`institution_id\` INT(11) NOT NULL,
         \`department_or_class\` VARCHAR(100) NOT NULL,
         \`year_or_section\` VARCHAR(50) NOT NULL,
-        \`bus_route_id\` INT(11) NOT NULL,
-        \`bus_route_name\` VARCHAR(200) NOT NULL DEFAULT '' COMMENT 'Route code and name e.g. R-19 - Bodi',
-        \`stopping_name\` VARCHAR(150) NOT NULL,
+        \`is_hostel\` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 if hostel student, 0 if day scholar',
+        \`bus_route_id\` INT(11) NULL DEFAULT NULL,
+        \`bus_route_name\` VARCHAR(200) NULL DEFAULT NULL COMMENT 'Route code and name e.g. R-19 - Bodi',
+        \`stopping_name\` VARCHAR(150) NULL DEFAULT NULL,
         \`created_at\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         \`updated_at\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (\`id\`),
@@ -107,27 +108,41 @@ async function initializeDatabase() {
       // Column does not exist — expected
     }
 
-    // Migrate: add bus_route_name column to existing tables that don't have it yet
+    // Migrate: ensure route and stopping columns allow NULL (for hostel students)
     try {
-      await db.query(`ALTER TABLE \`students\` ADD COLUMN \`bus_route_name\` VARCHAR(200) NOT NULL DEFAULT '' COMMENT 'Route code and name' AFTER \`bus_route_id\``);
-      console.log('✅ Added bus_route_name column to students table.');
-    } catch (alterErr) {
-      // Column likely already exists — ignore duplicate column error
-      if (!alterErr.message?.includes('Duplicate column')) {
-        console.warn('ALTER TABLE note:', alterErr.message);
-      }
+      await db.query(`ALTER TABLE \`students\` MODIFY COLUMN \`bus_route_id\` INT(11) NULL DEFAULT NULL`);
+      await db.query(`ALTER TABLE \`students\` MODIFY COLUMN \`bus_route_name\` VARCHAR(200) NULL DEFAULT NULL`);
+      await db.query(`ALTER TABLE \`students\` MODIFY COLUMN \`stopping_name\` VARCHAR(150) NULL DEFAULT NULL`);
+    } catch (alterNullErr) {
+      // Ignore
     }
 
-    // Back-fill bus_route_name for existing rows that have empty name
+    // Migrate: ensure is_hostel column exists
+    try {
+      await db.query(`ALTER TABLE \`students\` ADD COLUMN \`is_hostel\` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 if hostel, 0 if day scholar' AFTER \`year_or_section\``);
+      console.log('✅ Added `is_hostel` column to students table.');
+    } catch (alterHostelErr) {
+      // Column already exists — ignore
+    }
+
+    // Migrate: add bus_route_name column to existing tables that don't have it yet
+    try {
+      await db.query(`ALTER TABLE \`students\` ADD COLUMN \`bus_route_name\` VARCHAR(200) NULL DEFAULT NULL COMMENT 'Route code and name' AFTER \`bus_route_id\``);
+      console.log('✅ Added bus_route_name column to students table.');
+    } catch (alterErr) {
+      // Column likely already exists
+    }
+
+    // Back-fill bus_route_name for existing day-scholar rows that have empty name
     try {
       await db.query(`
         UPDATE students s
         LEFT JOIN routes r ON s.bus_route_id = r.id
         SET s.bus_route_name = COALESCE(CONCAT(r.route_code, ' - ', r.route_name), CONCAT('Route #', s.bus_route_id))
-        WHERE s.bus_route_name = '' OR s.bus_route_name IS NULL
+        WHERE (s.is_hostel = 0 OR s.is_hostel IS NULL) AND s.bus_route_id IS NOT NULL AND (s.bus_route_name = '' OR s.bus_route_name IS NULL)
       `);
     } catch (bfErr) {
-      // Ignore if table routes is empty or not yet populated
+      // Ignore
     }
 
     // Ensure UNIQUE index on identifier for O(1) / O(log N) instant lookup and strict duplicate prevention
@@ -206,13 +221,18 @@ app.get('/api/students', async (req, res) => {
         COALESCE(i.type, 'college') AS institutionType,
         s.department_or_class AS departmentOrClass,
         s.year_or_section AS yearOrSection,
+        s.is_hostel AS isHostel,
         s.bus_route_id AS busRouteId,
         CASE
-          WHEN s.bus_route_name IS NOT NULL AND s.bus_route_name != ''
-            THEN s.bus_route_name
-          ELSE COALESCE(CONCAT(r.route_code, ' - ', r.route_name), CONCAT('Route #', s.bus_route_id))
+          WHEN s.is_hostel = 1 THEN NULL
+          WHEN s.bus_route_name IS NOT NULL AND s.bus_route_name != '' THEN s.bus_route_name
+          WHEN s.bus_route_id IS NOT NULL THEN COALESCE(CONCAT(r.route_code, ' - ', r.route_name), CONCAT('Route #', s.bus_route_id))
+          ELSE NULL
         END AS busRouteName,
-        s.stopping_name AS stoppingName,
+        CASE
+          WHEN s.is_hostel = 1 THEN NULL
+          ELSE s.stopping_name
+        END AS stoppingName,
         s.created_at AS createdAt,
         s.updated_at AS updatedAt
       FROM students s
@@ -237,7 +257,7 @@ app.get('/api/students/check/:identifier', async (req, res) => {
 
     const db = getPool();
     const [rows] = await db.query(
-      `SELECT id, student_name, stopping_name, bus_route_name 
+      `SELECT id, student_name, stopping_name, bus_route_name, is_hostel 
        FROM students 
        WHERE identifier = ? 
        LIMIT 1`,
@@ -246,12 +266,17 @@ app.get('/api/students/check/:identifier', async (req, res) => {
 
     if (rows && rows.length > 0) {
       const match = rows[0];
+      const isHostel = match.is_hostel === 1 || (!match.bus_route_name && !match.stopping_name);
+      const desc = isHostel
+        ? 'Hostel Student'
+        : `${match.bus_route_name || 'Assigned Route'}, Stop: ${match.stopping_name}`;
       return res.json({
         exists: true,
         studentName: match.student_name,
         stoppingName: match.stopping_name,
         busRouteName: match.bus_route_name,
-        message: `Already registered for "${match.student_name}" (${match.bus_route_name || 'Assigned Route'}, Stop: ${match.stopping_name})`,
+        isHostel,
+        message: `Already registered for "${match.student_name}" (${desc})`,
       });
     }
 
@@ -274,15 +299,25 @@ app.post('/api/students', async (req, res) => {
       institutionId,
       departmentOrClass,
       yearOrSection,
+      isHostel,
       busRouteId,
       busRouteName,
       stoppingName,
     } = req.body;
 
-    if (!studentName || !identifier || !institutionId || !busRouteId || !stoppingName) {
+    const isHostelStudent = isHostel === true || isHostel === 1 || isHostel === 'true';
+
+    if (!studentName || !identifier || !institutionId || !departmentOrClass || !yearOrSection) {
       return res.status(400).json({
         success: false,
         error: 'Missing required student enrollment fields.',
+      });
+    }
+
+    if (!isHostelStudent && (!busRouteId || !stoppingName)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Day scholar students must select a Bus Route and Boarding Stop.',
       });
     }
 
@@ -291,45 +326,55 @@ app.post('/api/students', async (req, res) => {
 
     // Check if Register Number is already registered in MySQL
     const [existing] = await db.query(
-      'SELECT id, student_name, stopping_name, bus_route_name FROM students WHERE identifier = ? LIMIT 1',
+      'SELECT id, student_name, stopping_name, bus_route_name, is_hostel FROM students WHERE identifier = ? LIMIT 1',
       [cleanIdentifier]
     );
 
     if (existing && existing.length > 0) {
       const prev = existing[0];
+      const prevIsHostel = prev.is_hostel === 1;
+      const desc = prevIsHostel ? 'Hostel Student' : `Route: ${prev.bus_route_name || 'Assigned Route'}, Stop: ${prev.stopping_name}`;
       return res.status(409).json({
         success: false,
-        error: `Register Number "${cleanIdentifier}" is already registered for "${prev.student_name}" (Route: ${prev.bus_route_name || 'Assigned Route'}, Stop: ${prev.stopping_name}). Multiple submissions with the same Register Number are not allowed.`,
+        error: `Register Number "${cleanIdentifier}" is already registered for "${prev.student_name}" (${desc}). Multiple submissions with the same Register Number are not allowed.`,
       });
     }
 
-    // If busRouteName not sent from frontend, look it up from routes table
-    let routeName = busRouteName ? busRouteName.trim() : '';
-    if (!routeName) {
-      try {
-        const [routeRows] = await db.query(
-          `SELECT CONCAT(route_code, ' - ', route_name) AS name FROM routes WHERE id = ? LIMIT 1`,
-          [parseInt(busRouteId, 10)]
-        );
-        routeName = routeRows[0]?.name || `Route #${busRouteId}`;
-      } catch {
-        routeName = `Route #${busRouteId}`;
+    let routeName = null;
+    let targetRouteId = null;
+    let targetStopping = null;
+
+    if (!isHostelStudent) {
+      targetRouteId = parseInt(busRouteId, 10);
+      targetStopping = stoppingName ? stoppingName.trim() : '';
+      routeName = busRouteName ? busRouteName.trim() : '';
+      if (!routeName && targetRouteId) {
+        try {
+          const [routeRows] = await db.query(
+            `SELECT CONCAT(route_code, ' - ', route_name) AS name FROM routes WHERE id = ? LIMIT 1`,
+            [targetRouteId]
+          );
+          routeName = routeRows[0]?.name || `Route #${targetRouteId}`;
+        } catch {
+          routeName = `Route #${targetRouteId}`;
+        }
       }
     }
 
     const [result] = await db.query(
       `INSERT INTO students 
-        (student_name, identifier, institution_id, department_or_class, year_or_section, bus_route_id, bus_route_name, stopping_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (student_name, identifier, institution_id, department_or_class, year_or_section, is_hostel, bus_route_id, bus_route_name, stopping_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         studentName.trim(),
         cleanIdentifier,
         parseInt(institutionId, 10),
         departmentOrClass ? departmentOrClass.trim() : '',
         yearOrSection ? yearOrSection.trim() : '',
-        parseInt(busRouteId, 10),
-        routeName,
-        stoppingName.trim(),
+        isHostelStudent ? 1 : 0,
+        isHostelStudent ? null : targetRouteId,
+        isHostelStudent ? null : routeName,
+        isHostelStudent ? null : targetStopping,
       ]
     );
 
@@ -346,6 +391,7 @@ app.post('/api/students', async (req, res) => {
         COALESCE(i.type, 'college') AS institutionType,
         s.department_or_class AS departmentOrClass,
         s.year_or_section AS yearOrSection,
+        s.is_hostel AS isHostel,
         s.bus_route_id AS busRouteId,
         s.bus_route_name AS busRouteName,
         s.stopping_name AS stoppingName,
@@ -362,13 +408,18 @@ app.post('/api/students', async (req, res) => {
       institutionId,
       departmentOrClass,
       yearOrSection,
-      busRouteId,
-      busRouteName: routeName,
-      stoppingName,
+      isHostel: isHostelStudent,
+      busRouteId: isHostelStudent ? null : targetRouteId,
+      busRouteName: isHostelStudent ? null : routeName,
+      stoppingName: isHostelStudent ? null : targetStopping,
       createdAt: new Date().toISOString(),
     };
 
-    console.log(`📥 Saved student "${studentName}" (${cleanIdentifier}) → Route: ${routeName} | Stop: ${stoppingName}`);
+    if (isHostelStudent) {
+      console.log(`📥 Saved HOSTEL student "${studentName}" (${cleanIdentifier}) → Route: NULL | Stop: NULL`);
+    } else {
+      console.log(`📥 Saved student "${studentName}" (${cleanIdentifier}) → Route: ${routeName} | Stop: ${targetStopping}`);
+    }
     res.status(201).json({ success: true, data: newStudent });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) {

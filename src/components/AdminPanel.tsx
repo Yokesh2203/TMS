@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   ArrowUpDown,
   ShieldX,
+  Home,
 } from 'lucide-react';
 import { Student } from '../types';
 import {
@@ -183,6 +184,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     const submittedItems = sortedStudents.map((s, idx) => {
       const rollInfo = extractRollNumber(s.identifier);
+      const isHostel = Boolean(s.isHostel || s.busRouteId === null || (!s.busRouteName && !s.stoppingName));
       return {
         key: s.id || `sub-${s.identifier}-${idx}`,
         sNo: rollInfo ? rollInfo.rollNo : idx + 1,
@@ -190,9 +192,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         studentName: s.studentName,
         departmentOrClass: s.departmentOrClass,
         yearOrSection: s.yearOrSection,
-        busRouteId: s.busRouteId,
-        busRouteName: s.busRouteName,
-        stoppingName: s.stoppingName,
+        isHostel,
+        busRouteId: isHostel ? null : s.busRouteId,
+        busRouteName: isHostel ? 'Hostel' : s.busRouteName,
+        stoppingName: isHostel ? 'Hostel' : s.stoppingName,
         isSubmitted: true,
       };
     });
@@ -211,6 +214,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         studentName: 'Not Submitted',
         departmentOrClass: selectedDept === 'ALL' ? 'Unassigned' : selectedDept,
         yearOrSection: selectedYear === 'ALL' ? '-' : selectedYear,
+        isHostel: false,
         busRouteId: '-',
         busRouteName: '-',
         stoppingName: '-',
@@ -290,19 +294,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       '  `institution_id` int(11) NOT NULL,',
       '  `department_or_class` varchar(100) NOT NULL,',
       '  `year_or_section` varchar(50) NOT NULL,',
-      '  `bus_route_id` int(11) NOT NULL,',
-      '  `bus_route_name` varchar(200) NOT NULL DEFAULT \'\',',
-      '  `stopping_name` varchar(150) NOT NULL,',
+      '  `is_hostel` tinyint(1) NOT NULL DEFAULT 0,',
+      '  `bus_route_id` int(11) DEFAULT NULL,',
+      '  `bus_route_name` varchar(200) DEFAULT NULL,',
+      '  `stopping_name` varchar(150) DEFAULT NULL,',
       '  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,',
       '  PRIMARY KEY (`id`)',
       ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
       '',
-      'INSERT INTO `students` (`id`, `student_name`, `identifier`, `institution_id`, `department_or_class`, `year_or_section`, `bus_route_id`, `bus_route_name`, `stopping_name`) VALUES',
+      'INSERT INTO `students` (`id`, `student_name`, `identifier`, `institution_id`, `department_or_class`, `year_or_section`, `is_hostel`, `bus_route_id`, `bus_route_name`, `stopping_name`) VALUES',
     ];
 
     const values = students.map((s, idx) => {
-      const escape = (val: string) => (val || '').replace(/'/g, "\\'");
-      return `(${idx + 1}, '${escape(s.studentName)}', '${escape(s.identifier)}', ${s.institutionId || 1}, '${escape(s.departmentOrClass)}', '${escape(s.yearOrSection)}', ${s.busRouteId || 0}, '${escape(s.busRouteName || '')}', '${escape(s.stoppingName)}')`;
+      const escape = (val: string | null | undefined) => (val || '').replace(/'/g, "\\'");
+      const isHostel = Boolean(s.isHostel || s.busRouteId === null);
+      return `(${idx + 1}, '${escape(s.studentName)}', '${escape(s.identifier)}', ${s.institutionId || 1}, '${escape(s.departmentOrClass)}', '${escape(s.yearOrSection)}', ${isHostel ? 1 : 0}, ${isHostel || !s.busRouteId ? 'NULL' : s.busRouteId}, ${isHostel || !s.busRouteName ? 'NULL' : `'${escape(s.busRouteName)}'`}, ${isHostel || !s.stoppingName ? 'NULL' : `'${escape(s.stoppingName)}'`})`;
     });
 
     lines.push(values.join(',\n') + ';');
@@ -1053,13 +1059,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                     {/* Bus Route */}
                     <td className="py-3 px-4 whitespace-nowrap">
-                      {item.isSubmitted && item.busRouteName !== '-' ? (
-                        <div className="flex items-center gap-1.5 text-slate-700">
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700 mr-1">
-                            Route {item.busRouteId}
+                      {item.isSubmitted ? (
+                        item.isHostel ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            <Home className="h-3 w-3 text-amber-600" />
+                            <span>Hostel Resident</span>
                           </span>
-                          <span className="font-medium truncate max-w-[160px]" title={item.busRouteName}>{item.busRouteName}</span>
-                        </div>
+                        ) : item.busRouteName && item.busRouteName !== '-' ? (
+                          <div className="flex items-center gap-1.5 text-slate-700">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700 mr-1">
+                              Route {item.busRouteId}
+                            </span>
+                            <span className="font-medium truncate max-w-[160px]" title={item.busRouteName}>{item.busRouteName}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
@@ -1067,10 +1082,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                     {/* Boarding Stop */}
                     <td className="py-3 px-4 whitespace-nowrap">
-                      {item.isSubmitted && item.stoppingName !== '-' ? (
-                        <div className="flex items-center gap-1.5 text-slate-700">
-                          <span className="font-medium truncate max-w-[160px]" title={item.stoppingName}>{item.stoppingName}</span>
-                        </div>
+                      {item.isSubmitted ? (
+                        item.isHostel ? (
+                          <span className="text-xs text-amber-800/80 font-medium italic">Campus Hostel (NULL)</span>
+                        ) : item.stoppingName && item.stoppingName !== '-' ? (
+                          <div className="flex items-center gap-1.5 text-slate-700">
+                            <span className="font-medium truncate max-w-[160px]" title={item.stoppingName}>{item.stoppingName}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}

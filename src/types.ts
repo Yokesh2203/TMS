@@ -30,9 +30,10 @@ export interface Student {
   identifier: string; // Register No (12-digit Anna University Register Number)
   departmentOrClass: string; // Engineering Department
   yearOrSection: string; // Engineering Year (1st, 2nd, 3rd, 4th)
-  busRouteId: string;
-  busRouteName: string;
-  stoppingName: string;
+  isHostel?: boolean; // True if hostel student, false if day scholar
+  busRouteId: string | null;
+  busRouteName: string | null;
+  stoppingName: string | null;
   createdAt: string;
   updatedAt?: string;
 }
@@ -43,6 +44,7 @@ export interface StudentFormData {
   identifier: string; // Register Number
   departmentOrClass: string; // Department
   yearOrSection: string; // Year
+  isHostel: boolean; // True if hostel resident (no bus required)
   busRouteId: string;
   stoppingName: string;
 }
