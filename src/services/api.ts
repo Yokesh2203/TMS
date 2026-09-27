@@ -51,11 +51,11 @@ export async function checkDbHealth(): Promise<DbStatus> {
   }
 }
 
-// 2. Fetch all students (MySQL first, fallback to localStorage)
-export async function fetchStudentsFromDb(): Promise<{ students: Student[]; source: 'mysql' | 'local' }> {
+// 2. Fetch all students (Strictly from MySQL Database)
+export async function fetchStudentsFromDb(): Promise<{ students: Student[]; source: 'mysql' }> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
     const res = await fetch(`${API_BASE}/api/students`, { signal: controller.signal });
     clearTimeout(timeoutId);
 
@@ -66,37 +66,28 @@ export async function fetchStudentsFromDb(): Promise<{ students: Student[]; sour
       }
     }
   } catch (err) {
-    console.warn('[TMS API] Could not fetch students from MySQL, falling back to local storage:', err);
+    console.warn('[TMS API] Could not fetch students from MySQL:', err);
   }
 
-  // Fallback to local storage
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      return { students: JSON.parse(saved), source: 'local' };
-    }
-  } catch {
-    // Ignore parse errors
-  }
-
-  return { students: [], source: 'local' };
+  return { students: [], source: 'mysql' };
 }
 
-// 2.5 Instant Live Register Number Availability Check (Instant O(1) B-Tree lookup)
+// 2.5 Instant Live Register Number Availability Check (Instant O(1) B-Tree lookup from MySQL)
 export async function checkIdentifierAvailability(identifier: string): Promise<{
   exists: boolean;
   studentName?: string;
   busRouteName?: string;
   stoppingName?: string;
   message?: string;
+  offline?: boolean;
 }> {
   const clean = identifier.trim();
   if (!clean) return { exists: false };
 
-  // 1. Check Backend Live Database (MySQL)
+  // Check Backend Live Database (MySQL)
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(`${API_BASE}/api/students/check/${encodeURIComponent(clean)}`, {
       signal: controller.signal,
     });
@@ -107,38 +98,18 @@ export async function checkIdentifierAvailability(identifier: string): Promise<{
       return data;
     }
   } catch {
-    // Fallback to local storage check if backend is offline
-  }
-
-  // 2. Local Storage fallback check
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const list: Student[] = JSON.parse(saved);
-      const match = list.find((s) => s.identifier.trim().toLowerCase() === clean.toLowerCase());
-      if (match) {
-        return {
-          exists: true,
-          studentName: match.studentName,
-          busRouteName: match.busRouteName,
-          stoppingName: match.stoppingName,
-          message: `Already registered for "${match.studentName}" (${match.busRouteName || 'Assigned route'}, Stop: ${match.stoppingName})`,
-        };
-      }
-    }
-  } catch {
-    // Ignore parse error
+    return { exists: false, offline: true, message: 'Database connecting...' };
   }
 
   return { exists: false, message: 'Register Number available' };
 }
 
-// 3. Save student (MySQL first, fallback to localStorage)
+// 3. Save student (Strictly to MySQL Database — No local storage fallback)
 export async function saveStudentToDb(
   studentData: Omit<Student, 'id' | 'createdAt' | 'updatedAt'>
-): Promise<{ savedStudent: Student; source: 'mysql' | 'local' }> {
+): Promise<{ savedStudent: Student; source: 'mysql' }> {
   try {
-    console.log(`📡 [TMS API] Submitting student to: ${API_BASE}/api/students`);
+    console.log(`📡 [TMS API] Submitting student strictly to: ${API_BASE}/api/students`);
     const res = await fetch(`${API_BASE}/api/students`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -148,7 +119,7 @@ export async function saveStudentToDb(
     if (res.ok) {
       const result = await res.json();
       if (result.success && result.data) {
-        console.log('✅ [TMS API] Student saved to Railway MySQL successfully:', result.data);
+        console.log('✅ [TMS API] Student safely recorded in Railway MySQL:', result.data);
         return { savedStudent: result.data, source: 'mysql' };
       }
     } else if (res.status === 409 || res.status === 400) {
@@ -156,46 +127,18 @@ export async function saveStudentToDb(
       throw new Error(errData.error || `Register Number "${studentData.identifier}" is already registered in the system.`);
     } else {
       const errData = await res.json().catch(() => ({}));
-      if (errData.error) {
-        throw new Error(errData.error);
-      }
+      throw new Error(errData.error || `Database server returned error (${res.status}). Registration failed.`);
     }
   } catch (error: any) {
-    // If it's a specific validation or duplicate rejection, rethrow immediately to notify user
-    if (error.message && (error.message.includes('already registered') || error.message.includes('Multiple submissions'))) {
+    // If it's a specific validation or duplicate rejection, rethrow to show student
+    if (error.message && (error.message.includes('already registered') || error.message.includes('Multiple submissions') || error.message.includes('required'))) {
       throw error;
     }
-    console.warn('⚠️ [TMS API] MySQL API unreachable, falling back to local browser storage:', error?.message || error);
+    console.error('❌ [TMS API] Failed to reach MySQL database:', error);
+    throw new Error('Cannot connect to the college MySQL database. Submissions are only accepted when connected to the server. Please check your connection and try again.');
   }
 
-  // Local storage fallback (offline)
-  const existing = localStorage.getItem(STORAGE_KEY);
-  const list: Student[] = existing ? JSON.parse(existing) : [];
-
-  // Check if identifier already exists locally
-  const duplicate = list.find(
-    (s) => s.identifier.trim().toLowerCase() === studentData.identifier.trim().toLowerCase()
-  );
-  if (duplicate) {
-    throw new Error(
-      `Register Number "${studentData.identifier}" is already registered for "${duplicate.studentName}". Multiple submissions are not allowed.`
-    );
-  }
-
-  const localStudent: Student = {
-    ...studentData,
-    id: `stu-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    createdAt: new Date().toISOString(),
-  };
-
-  try {
-    const updated = [localStudent, ...list];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  } catch (err) {
-    console.error('Failed to save to localStorage:', err);
-  }
-
-  return { savedStudent: localStudent, source: 'local' };
+  throw new Error('Failed to record student in MySQL database.');
 }
 
 // ==========================================

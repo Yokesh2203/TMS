@@ -99,6 +99,14 @@ async function initializeDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // Migrate: ensure s_no column is removed completely
+    try {
+      await db.query(`ALTER TABLE \`students\` DROP COLUMN \`s_no\``);
+      console.log('✅ Removed deprecated `s_no` column from students table.');
+    } catch (dropErr) {
+      // Column does not exist — expected
+    }
+
     // Migrate: add bus_route_name column to existing tables that don't have it yet
     try {
       await db.query(`ALTER TABLE \`students\` ADD COLUMN \`bus_route_name\` VARCHAR(200) NOT NULL DEFAULT '' COMMENT 'Route code and name' AFTER \`bus_route_id\``);

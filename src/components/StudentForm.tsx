@@ -29,18 +29,18 @@ import {
   COLLEGE_YEARS,
 } from '../data/mockData';
 import { Toast, ToastData } from './Toast';
-import { checkIdentifierAvailability } from '../services/api';
+import { checkIdentifierAvailability, DbStatus } from '../services/api';
 
 interface StudentFormProps {
   onSaveStudent: (student: Omit<Student, 'id' | 'createdAt' | 'updatedAt'>) => Promise<any> | any;
   editingStudent?: Student | null;
   onCancelEdit?: () => void;
-  saveSource?: 'mysql' | 'local' | null;
+  dbStatus?: DbStatus;
 }
 
 export const StudentForm: React.FC<StudentFormProps> = ({
   onSaveStudent,
-  saveSource,
+  dbStatus,
 }) => {
   const [formData, setFormData] = useState<StudentFormData>({
     institutionId: '1', // NSCET Engineering College default
@@ -398,19 +398,14 @@ export const StudentForm: React.FC<StudentFormProps> = ({
       };
 
       const result = await onSaveStudent(studentRecord);
-      const isMySql = result?.source === 'mysql';
 
       // Trigger Toast notification
       setToast({
         id: `toast-${Date.now()}`,
-        title: isMySql 
-          ? 'Registration Saved to Cloud Database!' 
-          : '⚠️ Saved to Local Storage (Backend Offline)',
-        message: isMySql
-          ? `${studentRecord.studentName} (${studentRecord.identifier}) was written directly to Railway MySQL.`
-          : `${studentRecord.studentName} was saved to browser storage because the Railway backend was unreachable.`,
-        type: isMySql ? 'success' : 'info',
-        dbSource: isMySql ? 'mysql' : 'local',
+        title: 'Registration Safely Recorded in Database!',
+        message: `${studentRecord.studentName} (${studentRecord.identifier}) was written directly to Railway MySQL.`,
+        type: 'success',
+        dbSource: 'mysql',
       });
 
       // Save temporary reference for confirmation banner
@@ -430,6 +425,8 @@ export const StudentForm: React.FC<StudentFormProps> = ({
         busRouteId: '',
         stoppingName: '',
       });
+      setRegCheckStatus('idle');
+      setRegCheckInfo(null);
     } catch (err: any) {
       console.error('Registration submission error:', err);
       const isDuplicate = 
@@ -445,8 +442,8 @@ export const StudentForm: React.FC<StudentFormProps> = ({
 
       setToast({
         id: `toast-err-${Date.now()}`,
-        title: isDuplicate ? '⚠️ Register Number Already Registered' : 'Registration Failed',
-        message: err?.message || 'Could not submit student registration.',
+        title: isDuplicate ? '⚠️ Register Number Already Registered' : '❌ Submission Failed',
+        message: err?.message || 'Could not connect to database. Submissions are only accepted when connected to the server.',
         type: 'error',
       });
     } finally {
@@ -472,6 +469,23 @@ export const StudentForm: React.FC<StudentFormProps> = ({
       {/* Toast Notification */}
       <Toast toast={toast} onClose={() => setToast(null)} duration={4500} />
 
+      {/* Offline Database Alert Notice */}
+      {dbStatus && !dbStatus.connected && (
+        <div className="bg-rose-50 border border-rose-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex items-center gap-3.5 text-rose-900 animate-in fade-in duration-200">
+          <div className="h-9 w-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+            <AlertCircle className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-xs sm:text-sm font-bold text-rose-950">
+              Database Offline — Registration Paused
+            </h3>
+            <p className="text-[11px] sm:text-xs text-rose-700 mt-0.5">
+              Connecting to the college MySQL database... You can fill out the form now, and submission will become enabled as soon as connection is verified.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Confirmation Banner when student is saved */}
       {lastSavedStudent && (
         <div className="bg-emerald-50/95 border border-emerald-200 rounded-2xl p-5 shadow-xs transition-all animate-in fade-in slide-in-from-top-3 duration-200">
@@ -485,9 +499,9 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                   <h3 className="text-sm font-semibold text-emerald-950">
                     Registration Safely Recorded in Database
                   </h3>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">
-                    <ShieldCheck className="h-3 w-3" />
-                    {saveSource === 'mysql' ? 'Saved to MySQL (phpMyAdmin)' : 'Saved to Local Storage'}
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                    <span>Saved to Railway MySQL</span>
                   </span>
                 </div>
                 <p className="text-xs text-emerald-800/90 mt-1">
@@ -1101,14 +1115,19 @@ export const StudentForm: React.FC<StudentFormProps> = ({
               <button
                 type="submit"
                 id="save-student-btn"
-                disabled={isSubmitting || regCheckStatus === 'taken' || regCheckStatus === 'checking'}
+                disabled={isSubmitting || (dbStatus !== undefined && !dbStatus.connected) || regCheckStatus === 'taken' || regCheckStatus === 'checking'}
                 className={`flex-1 inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl font-semibold text-sm text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
-                  regCheckStatus === 'taken'
+                  (dbStatus !== undefined && !dbStatus.connected) || regCheckStatus === 'taken'
                     ? 'bg-slate-400 cursor-not-allowed opacity-75'
                     : 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 cursor-pointer disabled:opacity-50'
                 }`}
               >
-                {regCheckStatus === 'checking' ? (
+                {dbStatus !== undefined && !dbStatus.connected ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin shrink-0 text-white" />
+                    <span>Database Offline — Connecting...</span>
+                  </>
+                ) : regCheckStatus === 'checking' ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin shrink-0" />
                     <span>Checking Register No...</span>
@@ -1121,7 +1140,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                 ) : (
                   <>
                     <Database className="h-4 w-4 shrink-0" />
-                    <span>Submit</span>
+                    <span>Submit Registration</span>
                     <ArrowRight className="h-3.5 w-3.5 ml-0.5 shrink-0" />
                   </>
                 )}

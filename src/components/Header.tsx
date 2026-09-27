@@ -31,14 +31,14 @@ export const Header: React.FC<HeaderProps> = ({
                   NSCET Transport Portal
                 </h1>
                 {dbStatus?.connected ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                     MySQL Connected
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-medium bg-amber-100/80 text-amber-800 border border-amber-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-                    Local Storage
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-medium bg-rose-100 text-rose-800 border border-rose-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500"></span>
+                    Database Offline
                   </span>
                 )}
               </div>

@@ -113,7 +113,7 @@ function AppContent() {
                     onSaveStudent={handleSaveStudent}
                     editingStudent={null}
                     onCancelEdit={() => {}}
-                    saveSource={saveSource}
+                    dbStatus={dbStatus}
                   />
                 </div>
               </main>
