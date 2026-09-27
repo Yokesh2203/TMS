@@ -370,11 +370,11 @@ export const StudentForm: React.FC<StudentFormProps> = ({
     const newErrors: Record<string, string> = {};
 
     if (!studentInitial.trim()) {
-      newErrors.initial = 'Initial is required (e.g. K).';
+      newErrors.initial = 'Initial is required (e.g. P).';
     }
 
     if (!studentNameOnly.trim()) {
-      newErrors.studentName = 'Student name is required (e.g. AJAY PRASATH).';
+      newErrors.studentName = 'Student name is required (e.g. DEVMOI).';
     }
 
     if (!formData.identifier.trim()) {
@@ -437,7 +437,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
         title: isHostel ? '🏢 Hostel Student Registration Saved!' : 'Registration Safely Recorded in Database!',
         message: isHostel
           ? `${studentRecord.studentName} (${studentRecord.identifier}) recorded as Hostel Resident (Route & Stop: NULL).`
-          : `${studentRecord.studentName} (${studentRecord.identifier}) was written directly to Railway MySQL.`,
+          : `${studentRecord.studentName} (${studentRecord.identifier}) was successfully recorded in the college database.`,
         type: 'success',
         dbSource: 'mysql',
       });
@@ -520,7 +520,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
               Database Offline — Registration Paused
             </h3>
             <p className="text-[11px] sm:text-xs text-rose-700 mt-0.5">
-              Connecting to the college MySQL database... You can fill out the form now, and submission will become enabled as soon as connection is verified.
+              Connecting to the college database... You can fill out the form now, and submission will become enabled as soon as connection is verified.
             </p>
           </div>
         </div>
@@ -541,7 +541,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                   </h3>
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
                     <ShieldCheck className="h-3 w-3 text-emerald-600" />
-                    <span>Saved to Railway MySQL</span>
+                    <span>Saved & Verified</span>
                   </span>
                 </div>
                 <p className="text-xs text-emerald-800/90 mt-1">
@@ -813,13 +813,13 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                   >
                     Initial <span className="text-rose-500">*</span>
                   </label>
-                  <span className="text-[10px] font-semibold text-slate-400">e.g. K</span>
+                  <span className="text-[10px] font-semibold text-slate-400">e.g. P</span>
                 </div>
                 <div className="relative">
                   <input
                     type="text"
                     id="student-initial-input"
-                    placeholder="e.g. K"
+                    placeholder="e.g. P"
                     maxLength={6}
                     value={studentInitial}
                     onChange={(e) => {
@@ -865,7 +865,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                   <input
                     type="text"
                     id="student-name-input"
-                    placeholder="e.g. AJAY PRASATH"
+                    placeholder="e.g. DEVMOI"
                     value={studentNameOnly}
                     onChange={(e) => {
                       const val = e.target.value.toUpperCase().replace(/[^A-Z\s]/g, '');
