@@ -55,6 +55,20 @@ export const StudentForm: React.FC<StudentFormProps> = ({
     stoppingName: '',
   });
 
+  // Dedicated Initial and Name fields for guaranteed "INITIAL.NAME" format (e.g. K.AJAY PRASATH)
+  const [studentInitial, setStudentInitial] = useState('');
+  const [studentNameOnly, setStudentNameOnly] = useState('');
+
+  const computeFullStudentName = (initial: string, nameOnly: string): string => {
+    const cleanInit = initial.trim().toUpperCase().replace(/[^A-Z.]/g, '');
+    const cleanName = nameOnly.trim().toUpperCase().replace(/[^A-Z\s]/g, '').replace(/\s+/g, ' ');
+    if (!cleanInit && !cleanName) return '';
+    if (!cleanInit) return cleanName;
+    const formattedInit = cleanInit.endsWith('.') ? cleanInit : `${cleanInit}.`;
+    if (!cleanName) return formattedInit;
+    return `${formattedInit}${cleanName}`;
+  };
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [lastSavedStudent, setLastSavedStudent] = useState<Student | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -355,8 +369,12 @@ export const StudentForm: React.FC<StudentFormProps> = ({
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.studentName.trim()) {
-      newErrors.studentName = 'Please enter your full name.';
+    if (!studentInitial.trim()) {
+      newErrors.initial = 'Initial is required (e.g. K).';
+    }
+
+    if (!studentNameOnly.trim()) {
+      newErrors.studentName = 'Student name is required (e.g. AJAY PRASATH).';
     }
 
     if (!formData.identifier.trim()) {
@@ -395,12 +413,13 @@ export const StudentForm: React.FC<StudentFormProps> = ({
       const inst = selectedInstitution;
       const isHostel = formData.isHostel;
       const route = !isHostel ? BUS_ROUTES.find((r) => r.id === formData.busRouteId) : null;
+      const fullStudentName = computeFullStudentName(studentInitial, studentNameOnly);
 
       const studentRecord: Omit<Student, 'id' | 'createdAt' | 'updatedAt'> = {
         institutionId: inst.id,
         institutionName: inst.name,
         institutionType: 'college',
-        studentName: formData.studentName.trim().toUpperCase(),
+        studentName: fullStudentName,
         identifier: formData.identifier.trim(),
         departmentOrClass: formData.departmentOrClass,
         yearOrSection: formData.yearOrSection,
@@ -441,6 +460,8 @@ export const StudentForm: React.FC<StudentFormProps> = ({
         busRouteId: '',
         stoppingName: '',
       });
+      setStudentInitial('');
+      setStudentNameOnly('');
       setRegCheckStatus('idle');
       setRegCheckInfo(null);
     } catch (err: any) {
@@ -478,6 +499,8 @@ export const StudentForm: React.FC<StudentFormProps> = ({
       busRouteId: '',
       stoppingName: '',
     });
+    setStudentInitial('');
+    setStudentNameOnly('');
     setErrors({});
   };
 
@@ -779,42 +802,113 @@ export const StudentForm: React.FC<StudentFormProps> = ({
               <span>Student Personal Details</span>
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label
-                  htmlFor="student-name-input"
-                  className="block text-xs font-medium text-slate-700"
-                >
-                  Student Full Name <span className="text-rose-500">*</span>
-                </label>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 uppercase tracking-wider">
-                  Capital Letters Only
+            {/* Split Initial & Name for Standardized Format */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              {/* Initial Input */}
+              <div className="sm:col-span-1">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label
+                    htmlFor="student-initial-input"
+                    className="block text-xs font-medium text-slate-700"
+                  >
+                    Initial <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[10px] font-semibold text-slate-400">e.g. K</span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="student-initial-input"
+                    placeholder="e.g. K"
+                    maxLength={6}
+                    value={studentInitial}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase().replace(/[^A-Z.]/g, '');
+                      setStudentInitial(val);
+                      if (errors.initial) {
+                        setErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.initial;
+                          return next;
+                        });
+                      }
+                    }}
+                    className={`w-full text-center px-3 py-2.5 text-sm uppercase tracking-wider font-bold bg-slate-50/50 hover:bg-white focus:bg-white border rounded-xl focus:outline-none focus:ring-2 transition-all ${
+                      errors.initial
+                        ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-200 text-rose-900'
+                        : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-100 text-slate-900'
+                    }`}
+                  />
+                </div>
+                {errors.initial && (
+                  <p className="mt-1 text-[11px] text-rose-600 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3 shrink-0" />
+                    {errors.initial}
+                  </p>
+                )}
+              </div>
+
+              {/* Student Full Name Input */}
+              <div className="sm:col-span-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label
+                    htmlFor="student-name-input"
+                    className="block text-xs font-medium text-slate-700"
+                  >
+                    Student Name <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 uppercase tracking-wider">
+                    Capital Letters Only
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="student-name-input"
+                    placeholder="e.g. AJAY PRASATH"
+                    value={studentNameOnly}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase().replace(/[^A-Z\s]/g, '');
+                      setStudentNameOnly(val);
+                      if (errors.studentName) {
+                        setErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.studentName;
+                          return next;
+                        });
+                      }
+                    }}
+                    className={`w-full pl-10 pr-4 py-2.5 text-sm uppercase tracking-wide bg-slate-50/50 hover:bg-white focus:bg-white border rounded-xl focus:outline-none focus:ring-2 transition-all ${
+                      errors.studentName
+                        ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-200 text-rose-900'
+                        : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-100 text-slate-900'
+                    }`}
+                  />
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                    <User className="h-4 w-4" />
+                  </div>
+                </div>
+                {errors.studentName && (
+                  <p className="mt-1 text-[11px] text-rose-600 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3 shrink-0" />
+                    {errors.studentName}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Live Real-Time Formatted Preview Banner */}
+            {(studentInitial.trim() || studentNameOnly.trim()) && (
+              <div className="p-3 bg-linear-to-r from-indigo-50/90 via-blue-50/80 to-purple-50/90 border border-indigo-200/80 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs animate-in fade-in duration-150">
+                <span className="text-[11px] text-indigo-800 font-medium flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                  <span>Enrolled DB Format (Anna Univ):</span>
+                </span>
+                <span className="font-mono font-bold text-xs bg-white px-3 py-1 rounded-lg border border-indigo-200 text-indigo-950 shadow-2xs">
+                  {computeFullStudentName(studentInitial, studentNameOnly) || '—'}
                 </span>
               </div>
-              <div className="relative">
-                <input
-                  type="text"
-                  id="student-name-input"
-                  placeholder="e.g. SNEHA SHARMA, VIGNESH KUMAR"
-                  value={formData.studentName}
-                  onChange={(e) => handleInputChange('studentName', e.target.value.toUpperCase())}
-                  className={`w-full pl-10 pr-4 py-2.5 text-sm uppercase tracking-wide bg-slate-50/50 hover:bg-white focus:bg-white border rounded-xl focus:outline-none focus:ring-2 transition-all ${
-                    errors.studentName
-                      ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-200 text-rose-900'
-                      : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-100 text-slate-900'
-                  }`}
-                />
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
-                  <User className="h-4 w-4" />
-                </div>
-              </div>
-              {errors.studentName && (
-                <p className="mt-1.5 text-xs text-rose-600 flex items-center gap-1">
-                  <AlertCircle className="h-3.5 w-3.5" />
-                  {errors.studentName}
-                </p>
-              )}
-            </div>
+            )}
           </div>
 
           {/* SECTION 3: Student Residence Category (Day Scholar vs Hosteller) */}
