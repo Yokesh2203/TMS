@@ -400,7 +400,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
         institutionId: inst.id,
         institutionName: inst.name,
         institutionType: 'college',
-        studentName: formData.studentName.trim(),
+        studentName: formData.studentName.trim().toUpperCase(),
         identifier: formData.identifier.trim(),
         departmentOrClass: formData.departmentOrClass,
         yearOrSection: formData.yearOrSection,
@@ -780,20 +780,25 @@ export const StudentForm: React.FC<StudentFormProps> = ({
             </div>
 
             <div>
-              <label
-                htmlFor="student-name-input"
-                className="block text-xs font-medium text-slate-700 mb-1.5"
-              >
-                Student Full Name <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label
+                  htmlFor="student-name-input"
+                  className="block text-xs font-medium text-slate-700"
+                >
+                  Student Full Name <span className="text-rose-500">*</span>
+                </label>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 uppercase tracking-wider">
+                  Capital Letters Only
+                </span>
+              </div>
               <div className="relative">
                 <input
                   type="text"
                   id="student-name-input"
-                  placeholder="e.g. Sneha Sharma, Vignesh Kumar"
+                  placeholder="e.g. SNEHA SHARMA, VIGNESH KUMAR"
                   value={formData.studentName}
-                  onChange={(e) => handleInputChange('studentName', e.target.value)}
-                  className={`w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50/50 hover:bg-white focus:bg-white border rounded-xl focus:outline-none focus:ring-2 transition-all ${
+                  onChange={(e) => handleInputChange('studentName', e.target.value.toUpperCase())}
+                  className={`w-full pl-10 pr-4 py-2.5 text-sm uppercase tracking-wide bg-slate-50/50 hover:bg-white focus:bg-white border rounded-xl focus:outline-none focus:ring-2 transition-all ${
                     errors.studentName
                       ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-200 text-rose-900'
                       : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-100 text-slate-900'

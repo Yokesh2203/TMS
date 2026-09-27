@@ -361,12 +361,14 @@ app.post('/api/students', async (req, res) => {
       }
     }
 
+    const cleanStudentName = studentName.trim().toUpperCase();
+
     const [result] = await db.query(
       `INSERT INTO students 
         (student_name, identifier, institution_id, department_or_class, year_or_section, is_hostel, bus_route_id, bus_route_name, stopping_name)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        studentName.trim(),
+        cleanStudentName,
         cleanIdentifier,
         parseInt(institutionId, 10),
         departmentOrClass ? departmentOrClass.trim() : '',
@@ -403,7 +405,7 @@ app.post('/api/students', async (req, res) => {
 
     const newStudent = rows[0] || {
       id: insertedId,
-      studentName,
+      studentName: cleanStudentName,
       identifier: cleanIdentifier,
       institutionId,
       departmentOrClass,
@@ -416,9 +418,9 @@ app.post('/api/students', async (req, res) => {
     };
 
     if (isHostelStudent) {
-      console.log(`📥 Saved HOSTEL student "${studentName}" (${cleanIdentifier}) → Route: NULL | Stop: NULL`);
+      console.log(`📥 Saved HOSTEL student "${cleanStudentName}" (${cleanIdentifier}) → Route: NULL | Stop: NULL`);
     } else {
-      console.log(`📥 Saved student "${studentName}" (${cleanIdentifier}) → Route: ${routeName} | Stop: ${targetStopping}`);
+      console.log(`📥 Saved student "${cleanStudentName}" (${cleanIdentifier}) → Route: ${routeName} | Stop: ${targetStopping}`);
     }
     res.status(201).json({ success: true, data: newStudent });
   } catch (error) {
