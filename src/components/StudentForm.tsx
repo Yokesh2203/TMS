@@ -813,13 +813,12 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                   >
                     Initial <span className="text-rose-500">*</span>
                   </label>
-                  <span className="text-[10px] font-semibold text-slate-400">e.g. P</span>
                 </div>
                 <div className="relative">
                   <input
                     type="text"
                     id="student-initial-input"
-                    placeholder="e.g. P"
+                    placeholder=""
                     maxLength={6}
                     value={studentInitial}
                     onChange={(e) => {
@@ -865,7 +864,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                   <input
                     type="text"
                     id="student-name-input"
-                    placeholder="e.g. DEVMOI"
+                    placeholder="DEVMOI"
                     value={studentNameOnly}
                     onChange={(e) => {
                       const val = e.target.value.toUpperCase().replace(/[^A-Z\s]/g, '');
