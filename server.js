@@ -265,18 +265,9 @@ app.get('/api/students/check/:identifier', async (req, res) => {
     );
 
     if (rows && rows.length > 0) {
-      const match = rows[0];
-      const isHostel = match.is_hostel === 1 || (!match.bus_route_name && !match.stopping_name);
-      const desc = isHostel
-        ? 'Hostel Student'
-        : `${match.bus_route_name || 'Assigned Route'}, Stop: ${match.stopping_name}`;
       return res.json({
         exists: true,
-        studentName: match.student_name,
-        stoppingName: match.stopping_name,
-        busRouteName: match.bus_route_name,
-        isHostel,
-        message: `Already registered for "${match.student_name}" (${desc})`,
+        message: 'This Register Number is already saved!',
       });
     }
 
@@ -331,12 +322,9 @@ app.post('/api/students', async (req, res) => {
     );
 
     if (existing && existing.length > 0) {
-      const prev = existing[0];
-      const prevIsHostel = prev.is_hostel === 1;
-      const desc = prevIsHostel ? 'Hostel Student' : `Route: ${prev.bus_route_name || 'Assigned Route'}, Stop: ${prev.stopping_name}`;
       return res.status(409).json({
         success: false,
-        error: `Register Number "${cleanIdentifier}" is already registered for "${prev.student_name}" (${desc}). Multiple submissions with the same Register Number are not allowed.`,
+        error: 'This Register Number is already saved!',
       });
     }
 

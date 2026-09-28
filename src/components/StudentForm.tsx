@@ -99,23 +99,17 @@ export const StudentForm: React.FC<StudentFormProps> = ({
         const res = await checkIdentifierAvailability(clean);
         if (res.exists) {
           setRegCheckStatus('taken');
-          setRegCheckInfo({
-            message: res.message,
-            studentName: res.studentName,
-            busRouteName: res.busRouteName,
-            stoppingName: res.stoppingName,
-            isHostel: res.isHostel,
-          });
+          setRegCheckInfo(null);
           setErrors((prev) => ({
             ...prev,
-            identifier: `Already registered for ${res.studentName || 'another student'}.`,
+            identifier: 'This Register Number is already saved!',
           }));
         } else {
           setRegCheckStatus('available');
           setRegCheckInfo(null);
           setErrors((prev) => {
             const next = { ...prev };
-            if (next.identifier && (next.identifier.includes('Already registered') || next.identifier.includes('required'))) {
+            if (next.identifier && (next.identifier.includes('already saved') || next.identifier.includes('Already registered') || next.identifier.includes('required'))) {
               delete next.identifier;
             }
             return next;
@@ -468,19 +462,22 @@ export const StudentForm: React.FC<StudentFormProps> = ({
       console.error('Registration submission error:', err);
       const isDuplicate = 
         err?.message?.toLowerCase()?.includes('already registered') ||
+        err?.message?.toLowerCase()?.includes('already saved') ||
         err?.message?.toLowerCase()?.includes('multiple submissions');
 
       if (isDuplicate) {
         setErrors((prev) => ({
           ...prev,
-          identifier: err.message || 'This Register Number is already registered.',
+          identifier: 'This Register Number is already saved!',
         }));
       }
 
       setToast({
         id: `toast-err-${Date.now()}`,
-        title: isDuplicate ? '⚠️ Register Number Already Registered' : '❌ Submission Failed',
-        message: err?.message || 'Could not connect to database. Submissions are only accepted when connected to the server.',
+        title: isDuplicate ? '⚠️ Already Registered' : '❌ Submission Failed',
+        message: isDuplicate
+          ? 'This Register Number is already saved!'
+          : err?.message || 'Could not connect to database. Submissions are only accepted when connected to the server.',
         type: 'error',
       });
     } finally {
@@ -689,14 +686,11 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                   </div>
                 </div>
 
-                {regCheckStatus === 'taken' && regCheckInfo ? (
-                  <div className="mt-1.5 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 space-y-1 animate-in fade-in duration-200 shadow-xs">
+                {regCheckStatus === 'taken' ? (
+                  <div className="mt-1.5 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 animate-in fade-in duration-200 shadow-xs">
                     <p className="font-bold flex items-center gap-1.5 text-rose-950">
                       <AlertCircle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
                       <span>This Register Number is already saved!</span>
-                    </p>
-                    <p className="text-[11px] text-rose-700 pl-5">
-                      Enrolled: <strong>{regCheckInfo.studentName}</strong> • {regCheckInfo.busRouteName || 'Assigned Route'} • Stop: <strong>{regCheckInfo.stoppingName}</strong>
                     </p>
                   </div>
                 ) : errors.identifier ? (
@@ -1059,27 +1053,11 @@ export const StudentForm: React.FC<StudentFormProps> = ({
           ) : (
             /* Day Scholar Bus Transport & Boarding Assignment */
             <div className="space-y-4 pt-2 border-t border-slate-100">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-800 tracking-wide uppercase">
-                  <span className="flex items-center justify-center h-5 w-5 rounded-full bg-indigo-100 text-indigo-800 text-[11px] font-bold">
-                    4
-                  </span>
-                  <span>Bus Transport &amp; Boarding Assignment</span>
-                </div>
-
-                {selectedRoute && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-slate-700 font-medium flex items-center gap-1.5 bg-amber-50 text-amber-800 px-2.5 py-0.5 rounded-full border border-amber-200">
-                      <Clock className="h-3 w-3 text-amber-600" />
-                      Departs {selectedRoute.timing}
-                    </span>
-                    {selectedRoute.distance ? (
-                      <span className="text-xs font-semibold flex items-center gap-1 bg-indigo-50 text-indigo-800 px-2.5 py-0.5 rounded-full border border-indigo-200">
-                        {selectedRoute.distance} km
-                      </span>
-                    ) : null}
-                  </div>
-                )}
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-800 tracking-wide uppercase">
+                <span className="flex items-center justify-center h-5 w-5 rounded-full bg-indigo-100 text-indigo-800 text-[11px] font-bold">
+                  4
+                </span>
+                <span>Bus Transport &amp; Boarding Assignment</span>
               </div>
 
               {/* Quick Stop & Route Finder Search Bar with Search Button */}
@@ -1253,7 +1231,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                         Assigned Stop: <span className="text-emerald-700 font-bold">{formData.stoppingName}</span>
                       </p>
                       <p className="text-[11px] text-emerald-800">
-                        {selectedRoute.routeNumber} — {selectedRoute.name} (Departs: {selectedRoute.timing})
+                        {selectedRoute.routeNumber} — {selectedRoute.name}
                       </p>
                     </div>
                   </div>
@@ -1348,7 +1326,6 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                               {stop}
                             </option>
                           ))}
-                          <option value="__SHOW_ALL_STOPS__">🔄 Browse all {allUniqueStops.length} stops across all routes</option>
                         </>
                       ) : (
                         <>
