@@ -1101,24 +1101,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                <th className="py-3.5 px-4 w-16">S.No</th>
-                <th className="py-3.5 px-4">Register Number</th>
-                <th className="py-3.5 px-4">Student Name</th>
-                <th className="py-3.5 px-4">Department &amp; Year</th>
-                <th className="py-3.5 px-4">Bus Route</th>
-                <th className="py-3.5 px-4">Boarding Stop</th>
-                <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4 text-center">Action</th>
+              <tr className="bg-slate-50/90 border-b border-slate-200/80 text-xs font-bold uppercase tracking-wider text-slate-500">
+                <th className="py-4 px-4 sm:px-5 w-20 min-w-[75px]">S.No</th>
+                <th className="py-4 px-4 sm:px-5 min-w-[160px]">Register Number</th>
+                <th className="py-4 px-4 sm:px-5 min-w-[190px]">Student Name</th>
+                <th className="py-4 px-4 sm:px-5 min-w-[140px]">Department &amp; Year</th>
+                <th className="py-4 px-4 sm:px-5 min-w-[210px]">Bus Route</th>
+                <th className="py-4 px-4 sm:px-5 min-w-[200px]">Boarding Stop</th>
+                <th className="py-4 px-4 sm:px-5 min-w-[120px]">Status</th>
+                <th className="py-4 px-4 sm:px-5 min-w-[100px] text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rosterItems.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
-                    <p className="text-sm font-medium text-slate-600">No student records found</p>
+                  <td colSpan={8} className="py-16 text-center text-slate-400">
+                    <p className="text-base font-semibold text-slate-600">No student records found</p>
                     <p className="text-xs mt-1">Try selecting a different department or clearing search filters</p>
                   </td>
                 </tr>
@@ -1128,23 +1128,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     key={item.key}
                     className={`transition-colors group ${
                       item.isSubmitted
-                        ? 'hover:bg-slate-50/70 bg-white'
+                        ? 'hover:bg-slate-50/80 bg-white'
                         : 'bg-rose-50/25 hover:bg-rose-50/50'
                     }`}
                   >
                     {/* S.No / Roll Number */}
-                    <td className="py-3 px-4 font-mono font-bold text-xs whitespace-nowrap">
-                      <span className={item.isSubmitted ? 'text-indigo-900 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/60' : 'text-slate-400 px-2'}>
+                    <td className="py-3.5 px-4 sm:px-5 font-mono font-bold text-sm whitespace-nowrap">
+                      <span className={item.isSubmitted ? 'text-indigo-900 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200/60 font-mono font-extrabold text-xs inline-block min-w-[42px] text-center shadow-2xs' : 'text-slate-400 px-2.5 font-mono'}>
                         #{item.sNo > 0 ? item.sNo : '-'}
                       </span>
                     </td>
 
                     {/* Register Number */}
-                    <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`px-2 py-0.5 rounded border ${
+                    <td className="py-3.5 px-4 sm:px-5 font-mono font-bold text-slate-900 whitespace-nowrap text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2.5 py-1 rounded-lg border text-xs font-mono font-bold tracking-wider ${
                           item.isSubmitted
-                            ? 'bg-slate-100 text-slate-900 border-slate-200/80 font-bold'
+                            ? 'bg-slate-100 text-slate-900 border-slate-200/80 shadow-2xs'
                             : 'bg-rose-100/50 text-rose-800 border-rose-200'
                         }`}>
                           {item.identifier}
@@ -1152,22 +1152,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <button
                           type="button"
                           onClick={() => handleCopy(item.identifier, item.identifier)}
-                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-600 p-0.5 rounded transition-opacity cursor-pointer"
+                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-700 p-1 rounded-md hover:bg-slate-100 transition-all cursor-pointer"
                           title="Copy Register Number"
                         >
                           {copiedText === item.identifier ? (
-                            <Check className="h-3 w-3 text-emerald-600" />
+                            <Check className="h-3.5 w-3.5 text-emerald-600" />
                           ) : (
-                            <Copy className="h-3 w-3" />
+                            <Copy className="h-3.5 w-3.5" />
                           )}
                         </button>
                       </div>
                     </td>
 
                     {/* Student Name */}
-                    <td className="py-3 px-4 whitespace-nowrap">
+                    <td className="py-3.5 px-4 sm:px-5 whitespace-nowrap">
                       {item.isSubmitted ? (
-                        <span className="font-semibold text-slate-900">{item.studentName}</span>
+                        <span className="font-bold text-slate-900 text-sm tracking-wide">{item.studentName}</span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-rose-500 font-medium italic text-xs">
                           Not Submitted
@@ -1176,29 +1176,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </td>
 
                     {/* Department & Year */}
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 font-medium text-slate-800">
+                    <td className="py-3.5 px-4 sm:px-5 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 font-bold text-slate-800 text-xs">
                         <span>{getDeptShortCode(item.departmentOrClass)}</span>
                       </div>
                       {item.isSubmitted && item.yearOrSection && (
-                        <div className="text-[11px] text-slate-500 font-semibold">{item.yearOrSection}</div>
+                        <div className="text-xs text-slate-500 font-medium mt-0.5">{item.yearOrSection}</div>
                       )}
                     </td>
 
                     {/* Bus Route */}
-                    <td className="py-3 px-4 whitespace-nowrap">
+                    <td className="py-3.5 px-4 sm:px-5 whitespace-nowrap">
                       {item.isSubmitted ? (
                         item.isHostel ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                            <Home className="h-3 w-3 text-amber-600" />
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100/90 text-amber-800 border border-amber-200 shadow-2xs">
+                            <Home className="h-3.5 w-3.5 text-amber-600" />
                             <span>Hostel Resident</span>
                           </span>
                         ) : item.busRouteName && item.busRouteName !== '-' ? (
-                          <div className="flex items-center gap-1.5 text-slate-700">
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700 mr-1">
+                          <div className="flex items-center gap-2 text-slate-800 text-xs">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-extrabold bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-2xs shrink-0">
                               Route {item.busRouteId}
                             </span>
-                            <span className="font-medium truncate max-w-[160px]" title={item.busRouteName}>{item.busRouteName}</span>
+                            <span className="font-semibold truncate max-w-[200px]" title={item.busRouteName}>{item.busRouteName}</span>
                           </div>
                         ) : (
                           <span className="text-slate-300">—</span>
@@ -1209,13 +1209,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </td>
 
                     {/* Boarding Stop */}
-                    <td className="py-3 px-4 whitespace-nowrap">
+                    <td className="py-3.5 px-4 sm:px-5 whitespace-nowrap">
                       {item.isSubmitted ? (
                         item.isHostel ? (
                           <span className="text-xs text-amber-800/80 font-medium italic">Campus Hostel (NULL)</span>
                         ) : item.stoppingName && item.stoppingName !== '-' ? (
-                          <div className="flex items-center gap-1.5 text-slate-700">
-                            <span className="font-medium truncate max-w-[160px]" title={item.stoppingName}>{item.stoppingName}</span>
+                          <div className="flex items-center gap-1.5 text-slate-800 text-xs font-semibold">
+                            <span className="truncate max-w-[200px]" title={item.stoppingName}>{item.stoppingName}</span>
                           </div>
                         ) : (
                           <span className="text-slate-300">—</span>
@@ -1226,30 +1226,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </td>
 
                     {/* Status Pill */}
-                    <td className="py-3 px-4 whitespace-nowrap">
+                    <td className="py-3.5 px-4 sm:px-5 whitespace-nowrap">
                       {item.isSubmitted ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                           Submitted
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100/70 text-rose-700 border border-rose-200">
-                          <AlertTriangle className="h-3 w-3 text-rose-500" />
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-100/80 text-rose-700 border border-rose-200 shadow-2xs">
+                          <AlertTriangle className="h-3.5 w-3.5 text-rose-500" />
                           Pending
                         </span>
                       )}
                     </td>
 
                     {/* Edit Action Button */}
-                    <td className="py-3 px-4 whitespace-nowrap text-center">
+                    <td className="py-3.5 px-4 sm:px-5 whitespace-nowrap text-center">
                       {item.isSubmitted && item.rawStudent ? (
                         <button
                           type="button"
                           onClick={() => handleOpenEdit(item.rawStudent!)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-indigo-600 text-slate-700 hover:text-white border border-slate-200 hover:border-indigo-600 transition-all cursor-pointer shadow-2xs group/btn"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-indigo-200 hover:border-indigo-600 transition-all cursor-pointer shadow-2xs group/btn"
                           title={`Edit ${item.studentName}'s route and details`}
                         >
-                          <Pencil className="h-3 w-3 text-slate-500 group-hover/btn:text-white" />
+                          <Pencil className="h-3.5 w-3.5 text-indigo-500 group-hover/btn:text-white transition-colors" />
                           <span>Edit</span>
                         </button>
                       ) : (
