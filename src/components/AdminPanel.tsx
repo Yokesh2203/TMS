@@ -168,11 +168,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return map;
   }, [departmentGapAnalysis]);
 
-  // Determine whether a department is "green" (verified by admin AND no gaps)
+  // Determine whether a department is "green" (all students submitted with no gaps, or manually verified)
   const isDeptGreen = (deptName: string): boolean => {
     const gap = deptGapMap[deptName];
     if (!gap || gap.totalSubmitted === 0) return false;
-    return verifiedDepts.has(deptName) && !gap.hasGaps;
+    return !gap.hasGaps || verifiedDepts.has(deptName);
   };
 
   // Combine submitted students with missing register numbers for a complete S.No / Roll Number roster
@@ -374,10 +374,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </p>
         </div>
 
-        {/* Card 2: Departments Verified */}
+        {/* Card 2: Departments Complete */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Departments Verified</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              {selectedYear !== 'ALL' ? `${selectedYear} Complete Depts` : 'Departments Complete'}
+            </span>
             <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <ShieldCheck className="h-4 w-4" />
             </div>
@@ -388,8 +390,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
             {verifiedGreenDepts === ENGINEERING_DEPARTMENTS.length
-              ? '🎉 All departments verified!'
-              : `${ENGINEERING_DEPARTMENTS.length - verifiedGreenDepts} departments pending review`}
+              ? `🎉 All departments in ${selectedYear !== 'ALL' ? selectedYear : 'college'} 100% submitted!`
+              : `${ENGINEERING_DEPARTMENTS.length - verifiedGreenDepts} departments pending completion`}
           </p>
         </div>
 
@@ -507,12 +509,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             {ENGINEERING_DEPARTMENTS.map((dept) => {
               const isSelected = selectedDept === dept.name;
               const isGreen = isDeptGreen(dept.name);
+              const gapInfo = deptGapMap[dept.name];
+              const hasGaps = gapInfo?.hasGaps ?? false;
 
-              const pillClass = isSelected
-                ? 'bg-blue-50/90 text-blue-700 border-2 border-blue-600 shadow-xs ring-2 ring-blue-100 font-bold'
-                : isGreen
-                ? 'bg-emerald-50/90 text-emerald-700 border-2 border-emerald-500 shadow-xs ring-2 ring-emerald-100 font-bold'
-                : 'bg-white text-slate-700 border border-slate-200 hover:border-slate-300 hover:bg-slate-50';
+              let pillClass = 'bg-white text-slate-700 border border-slate-200 hover:border-slate-300 hover:bg-slate-50';
+
+              if (isSelected && isGreen) {
+                pillClass = 'bg-emerald-600 text-white border-2 border-emerald-700 shadow-sm ring-2 ring-emerald-200 font-bold';
+              } else if (isSelected) {
+                pillClass = 'bg-blue-600 text-white border-2 border-blue-700 shadow-sm ring-2 ring-blue-200 font-bold';
+              } else if (isGreen) {
+                pillClass = 'bg-emerald-50 text-emerald-800 border-2 border-emerald-500 shadow-xs ring-2 ring-emerald-100 font-bold hover:bg-emerald-100';
+              } else if (hasGaps) {
+                pillClass = 'bg-rose-50/70 text-rose-800 border border-rose-300 hover:bg-rose-100/70';
+              }
 
               return (
                 <button
@@ -520,13 +530,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   type="button"
                   onClick={() => setSelectedDept(isSelected ? 'ALL' : dept.name)}
                   className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${pillClass}`}
-                  title={isGreen ? `${dept.name} — Verified ✓` : dept.name}
+                  title={
+                    isGreen
+                      ? `${dept.name} — All ${selectedYear !== 'ALL' ? selectedYear : ''} students submitted! (${gapInfo?.totalSubmitted || 0} students, 0 gaps) ✓`
+                      : hasGaps
+                      ? `${dept.name} — ${gapInfo?.missingCount} missing register numbers in sequence`
+                      : dept.name
+                  }
                 >
                   <span>{dept.code}</span>
                   {isSelected ? (
-                    <Check className="h-3.5 w-3.5 text-blue-600 stroke-[3]" />
+                    <Check className="h-3.5 w-3.5 text-white stroke-[3]" />
                   ) : isGreen ? (
-                    <Check className="h-3.5 w-3.5 text-emerald-600 stroke-[3]" />
+                    <span className="flex items-center justify-center h-4 w-4 rounded-full bg-emerald-600 text-white text-[10px] font-extrabold">✓</span>
+                  ) : hasGaps ? (
+                    <span className="text-rose-600 font-bold text-[10px] px-1 bg-rose-100 rounded-full">{gapInfo?.missingCount}</span>
                   ) : (
                     <span className="text-slate-400 font-bold ml-0.5 text-xs">+</span>
                   )}
@@ -760,9 +778,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     key={dept.code}
                     className={`p-3.5 rounded-2xl border transition-all ${
                       isGreen
-                        ? 'bg-emerald-50/70 border-emerald-300 ring-1 ring-emerald-200'
+                        ? 'bg-emerald-50/80 border-emerald-400 ring-2 ring-emerald-200/80 shadow-xs'
                         : hasGaps
-                        ? 'bg-rose-50/40 border-rose-200'
+                        ? 'bg-rose-50/40 border-rose-200 shadow-2xs'
                         : 'bg-slate-50/80 border-slate-200'
                     }`}
                   >
@@ -773,53 +791,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         onClick={() => setSelectedDept(dept.name)}
                         title={`Filter by ${dept.name}`}
                       >
-                        <span className={isGreen ? 'text-emerald-800' : 'text-slate-900'}>{dept.code}</span>
-                        {isGreen && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />}
+                        <span className={isGreen ? 'text-emerald-950 font-extrabold' : 'text-slate-900'}>{dept.code}</span>
+                        <span className="text-[11px] text-slate-500 font-normal">({dept.name})</span>
+                        {isGreen && <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />}
                       </span>
 
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                         isGreen
-                          ? 'bg-emerald-200 text-emerald-800'
+                          ? 'bg-emerald-600 text-white shadow-2xs'
                           : hasGaps
                           ? 'bg-rose-100 text-rose-700'
-                          : 'bg-emerald-100 text-emerald-700'
+                          : 'bg-slate-200 text-slate-700'
                       }`}>
-                        {isGreen ? 'Verified ✓' : hasGaps ? `${gapInfo!.missingCount} Missing` : hasStudents ? 'Continuous' : 'No Data'}
+                        {isGreen ? '✓ 100% Submitted' : hasGaps ? `${gapInfo!.missingCount} Missing` : 'No Data'}
                       </span>
                     </div>
 
                     {/* Stats Row */}
                     {hasStudents && gapInfo && (
-                      <div className="text-[11px] text-slate-500 font-mono mb-2.5">
-                        <div>Submitted: <strong>{gapInfo.totalSubmitted}</strong></div>
+                      <div className="text-[11px] text-slate-600 font-mono mb-2 flex items-center justify-between">
+                        <span>Submitted: <strong className="text-slate-900">{gapInfo.totalSubmitted}</strong></span>
+                        <span className={isGreen ? 'text-emerald-700 font-bold' : hasGaps ? 'text-rose-600 font-bold' : 'text-slate-500'}>
+                          {isGreen ? 'Continuous (0 gaps)' : `${gapInfo.missingCount} Missing`}
+                        </span>
                       </div>
                     )}
 
-                    {/* Verify Button or Gap Message */}
+                    {/* Verify Button or Status Message */}
                     {canVerify && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); toggleDeptVerification(dept.name); }}
-                        className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          isVerified
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                            : 'bg-white hover:bg-emerald-50 text-emerald-700 border-2 border-emerald-500'
-                        }`}
-                      >
-                        {isVerified ? (
-                          <><CheckCircle2 className="h-3.5 w-3.5" /><span>Verified ✓ (Click to Undo)</span></>
-                        ) : (
-                          <><ShieldCheck className="h-3.5 w-3.5" /><span>Mark as Verified</span></>
-                        )}
-                      </button>
+                      <div className="mt-2">
+                        <div className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-100/90 text-emerald-800 border border-emerald-300">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>All Students Submitted ✓</span>
+                        </div>
+                      </div>
                     )}
                     {!hasStudents && (
-                      <div className="text-[11px] text-slate-400 italic">No submissions yet</div>
+                      <div className="text-[11px] text-slate-400 italic">No submissions recorded for {selectedYear !== 'ALL' ? selectedYear : 'this selection'}</div>
                     )}
                     {hasStudents && hasGaps && (
-                      <div className="text-[11px] text-rose-600 font-semibold flex items-center gap-1">
+                      <div className="text-[11px] text-rose-600 font-semibold flex items-center gap-1 mt-1">
                         <AlertTriangle className="h-3 w-3" />
-                        Fix {gapInfo!.missingCount} missing numbers first
+                        {gapInfo!.missingCount} student register numbers missing
                       </div>
                     )}
                   </div>
