@@ -142,6 +142,35 @@ export async function saveStudentToDb(
   throw new Error('Failed to record student in MySQL database.');
 }
 
+// 3.5 Update existing student in MySQL Database
+export async function updateStudentInDb(
+  id: string | number,
+  studentData: Partial<Student>
+): Promise<{ updatedStudent: Student; source: 'mysql' }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/students/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(studentData),
+    });
+
+    if (res.ok) {
+      const result = await res.json();
+      if (result.success && result.data) {
+        return { updatedStudent: result.data, source: 'mysql' };
+      }
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to update student details in database.');
+    }
+  } catch (err: any) {
+    console.error('❌ [TMS API] Failed to update student in database:', err);
+    throw err;
+  }
+
+  throw new Error('Could not complete student update.');
+}
+
 // ==========================================
 // 4. Admin Authentication Services (Server-Side Verified)
 // ==========================================

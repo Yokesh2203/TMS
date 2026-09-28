@@ -423,6 +423,100 @@ app.post('/api/students', async (req, res) => {
   }
 });
 
+// 3.5 Update a student record in MySQL
+app.put('/api/students/:id', async (req, res) => {
+  try {
+    const studentId = parseInt(req.params.id, 10);
+    if (!studentId) {
+      return res.status(400).json({ success: false, error: 'Invalid student ID.' });
+    }
+
+    const {
+      studentName,
+      identifier,
+      departmentOrClass,
+      yearOrSection,
+      isHostel,
+      busRouteId,
+      busRouteName,
+      stoppingName,
+    } = req.body;
+
+    const isHostelStudent = isHostel === true || isHostel === 1 || isHostel === 'true';
+    const cleanStudentName = studentName ? studentName.trim().toUpperCase() : null;
+    const cleanIdentifier = identifier ? identifier.trim() : null;
+
+    let routeName = null;
+    let targetRouteId = null;
+    let targetStopping = null;
+
+    if (!isHostelStudent) {
+      targetRouteId = busRouteId ? parseInt(busRouteId, 10) : null;
+      targetStopping = stoppingName ? stoppingName.trim() : null;
+      routeName = busRouteName ? busRouteName.trim() : null;
+    }
+
+    const db = getPool();
+    await db.query(`
+      UPDATE students
+      SET 
+        student_name = COALESCE(?, student_name),
+        identifier = COALESCE(?, identifier),
+        department_or_class = COALESCE(?, department_or_class),
+        year_or_section = COALESCE(?, year_or_section),
+        is_hostel = ?,
+        bus_route_id = ?,
+        bus_route_name = ?,
+        stopping_name = ?
+      WHERE id = ?
+    `, [
+      cleanStudentName,
+      cleanIdentifier,
+      departmentOrClass ? departmentOrClass.trim() : null,
+      yearOrSection ? yearOrSection.trim() : null,
+      isHostelStudent ? 1 : 0,
+      isHostelStudent ? null : targetRouteId,
+      isHostelStudent ? null : routeName,
+      isHostelStudent ? null : targetStopping,
+      studentId,
+    ]);
+
+    // Fetch the updated student record
+    const [rows] = await db.query(`
+      SELECT 
+        s.id,
+        s.student_name AS studentName,
+        s.identifier,
+        s.institution_id AS institutionId,
+        COALESCE(i.name, CONCAT('Institution #', s.institution_id)) AS institutionName,
+        COALESCE(i.type, 'college') AS institutionType,
+        s.department_or_class AS departmentOrClass,
+        s.year_or_section AS yearOrSection,
+        s.is_hostel AS isHostel,
+        s.bus_route_id AS busRouteId,
+        s.bus_route_name AS busRouteName,
+        s.stopping_name AS stoppingName,
+        s.created_at AS createdAt
+      FROM students s
+      LEFT JOIN institutions i ON s.institution_id = i.id
+      WHERE s.id = ?
+    `, [studentId]);
+
+    const updatedStudent = rows[0];
+    console.log(`✏️ Updated student #${studentId} "${updatedStudent?.studentName || cleanStudentName}" in MySQL.`);
+    res.json({ success: true, data: updatedStudent });
+  } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) {
+      return res.status(409).json({
+        success: false,
+        error: 'This Register Number is already saved for another student.',
+      });
+    }
+    console.error('Error updating student:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 4. Admin Authentication Endpoints (Backed by MySQL Database)
 // Admin Login
 app.post('/api/admin/login', async (req, res) => {

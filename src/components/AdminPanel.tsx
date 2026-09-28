@@ -13,17 +13,25 @@ import {
   ArrowUpDown,
   ShieldX,
   Home,
+  Pencil,
+  X,
+  Bus,
+  MapPin,
+  Loader2,
+  User,
 } from 'lucide-react';
 import { Student } from '../types';
 import {
   ENGINEERING_DEPARTMENTS,
   COLLEGE_YEARS,
+  BUS_ROUTES,
 } from '../data/mockData';
 import {
   detectRegisterNumberGaps,
   detectDepartmentGaps,
   extractRollNumber,
 } from '../utils/gapDetection';
+import { updateStudentInDb } from '../services/api';
 
 // Persists which DEPARTMENTS have been manually verified by admin
 const VERIFIED_DEPTS_KEY = 'nscet_tms_verified_departments_v1';
@@ -31,14 +39,119 @@ const VERIFIED_DEPTS_KEY = 'nscet_tms_verified_departments_v1';
 interface AdminPanelProps {
   students: Student[];
   onRefreshStudents?: () => void;
+  onUpdateStudent?: (studentId: string, data: Partial<Student>) => Promise<any>;
   isRefreshing?: boolean;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   students,
   onRefreshStudents,
+  onUpdateStudent,
   isRefreshing = false,
 }) => {
+  // Edit Student Modal state
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [editFormData, setEditFormData] = useState<{
+    studentName: string;
+    departmentOrClass: string;
+    yearOrSection: string;
+    isHostel: boolean;
+    busRouteId: string;
+    stoppingName: string;
+  }>({
+    studentName: '',
+    departmentOrClass: '',
+    yearOrSection: '',
+    isHostel: false,
+    busRouteId: '',
+    stoppingName: '',
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editToast, setEditToast] = useState<string | null>(null);
+
+  const handleOpenEdit = (student: Student) => {
+    const isHostel = Boolean(student.isHostel || student.busRouteId === null || (!student.busRouteName && !student.stoppingName));
+    setEditingStudent(student);
+    setEditFormData({
+      studentName: student.studentName || '',
+      departmentOrClass: student.departmentOrClass || ENGINEERING_DEPARTMENTS[0].name,
+      yearOrSection: student.yearOrSection || COLLEGE_YEARS[3],
+      isHostel,
+      busRouteId: student.busRouteId ? String(student.busRouteId) : (BUS_ROUTES[0]?.id || '1'),
+      stoppingName: student.stoppingName || (BUS_ROUTES[0]?.stops[0] || ''),
+    });
+    setEditError(null);
+  };
+
+  const editSelectedRoute = useMemo(() => {
+    return BUS_ROUTES.find((r) => r.id === editFormData.busRouteId) || BUS_ROUTES[0];
+  }, [editFormData.busRouteId]);
+
+  const editAvailableStops = editSelectedRoute ? editSelectedRoute.stops : [];
+
+  const handleEditRouteChange = (newRouteId: string) => {
+    const route = BUS_ROUTES.find((r) => r.id === newRouteId);
+    setEditFormData((prev) => {
+      const isCurrentStopValid = route ? route.stops.includes(prev.stoppingName) : false;
+      return {
+        ...prev,
+        isHostel: false,
+        busRouteId: newRouteId,
+        stoppingName: isCurrentStopValid ? prev.stoppingName : (route?.stops[0] || ''),
+      };
+    });
+  };
+
+  const handleSaveStudentEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+
+    if (!editFormData.studentName.trim()) {
+      setEditError('Student full name is required.');
+      return;
+    }
+
+    if (!editFormData.isHostel && (!editFormData.busRouteId || !editFormData.stoppingName)) {
+      setEditError('Day scholar students must have an assigned bus route and boarding stop.');
+      return;
+    }
+
+    setIsSavingEdit(true);
+    setEditError(null);
+
+    try {
+      const route = !editFormData.isHostel ? BUS_ROUTES.find((r) => r.id === editFormData.busRouteId) : null;
+      const updatedPayload: Partial<Student> = {
+        studentName: editFormData.studentName.trim().toUpperCase(),
+        departmentOrClass: editFormData.departmentOrClass,
+        yearOrSection: editFormData.yearOrSection,
+        isHostel: editFormData.isHostel,
+        busRouteId: editFormData.isHostel ? null : (route?.id || null),
+        busRouteName: editFormData.isHostel ? null : (route ? `${route.routeNumber} - ${route.name}` : null),
+        stoppingName: editFormData.isHostel ? null : editFormData.stoppingName,
+      };
+
+      if (onUpdateStudent) {
+        await onUpdateStudent(editingStudent.id, updatedPayload);
+      } else {
+        await updateStudentInDb(editingStudent.id, updatedPayload);
+        if (onRefreshStudents) {
+          onRefreshStudents();
+        }
+      }
+
+      setEditToast(`Updated "${editFormData.studentName.trim().toUpperCase()}" (${editingStudent.identifier}) successfully!`);
+      setTimeout(() => setEditToast(null), 4000);
+      setEditingStudent(null);
+    } catch (err: any) {
+      console.error('Failed to update student:', err);
+      setEditError(err.message || 'Failed to update student in database.');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   // Department filter: 'ALL' or department full name
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
 
@@ -197,6 +310,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         busRouteName: isHostel ? 'Hostel' : s.busRouteName,
         stoppingName: isHostel ? 'Hostel' : s.stoppingName,
         isSubmitted: true,
+        rawStudent: s,
       };
     });
 
@@ -997,12 +1111,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <th className="py-3.5 px-4">Bus Route</th>
                 <th className="py-3.5 px-4">Boarding Stop</th>
                 <th className="py-3.5 px-4">Status</th>
+                <th className="py-3.5 px-4 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rosterItems.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <p className="text-sm font-medium text-slate-600">No student records found</p>
                     <p className="text-xs mt-1">Try selecting a different department or clearing search filters</p>
                   </td>
@@ -1124,6 +1239,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </span>
                       )}
                     </td>
+
+                    {/* Edit Action Button */}
+                    <td className="py-3 px-4 whitespace-nowrap text-center">
+                      {item.isSubmitted && item.rawStudent ? (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(item.rawStudent!)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-indigo-600 text-slate-700 hover:text-white border border-slate-200 hover:border-indigo-600 transition-all cursor-pointer shadow-2xs group/btn"
+                          title={`Edit ${item.studentName}'s route and details`}
+                        >
+                          <Pencil className="h-3 w-3 text-slate-500 group-hover/btn:text-white" />
+                          <span>Edit</span>
+                        </button>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -1131,6 +1263,231 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Toast message after saving edit */}
+      {editToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+          <span>{editToast}</span>
+        </div>
+      )}
+
+      {/* Edit Student Modal */}
+      {editingStudent && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150 overflow-y-auto">
+          <div className="max-w-lg w-full bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150 my-auto">
+            {/* Modal Header */}
+            <div className="px-6 py-4.5 bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-950 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-xl bg-white/10 flex items-center justify-center text-sky-400">
+                  <Pencil className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">Edit Student Details</h3>
+                  <p className="text-[11px] text-slate-300 font-mono font-semibold">
+                    Reg No: {editingStudent.identifier}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingStudent(null)}
+                className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveStudentEdit} className="p-6 space-y-4 text-xs">
+              {editError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
+                  <span>{editError}</span>
+                </div>
+              )}
+
+              {/* Student Name */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Student Name (Capital Letters) <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={editFormData.studentName}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        studentName: e.target.value.toUpperCase(),
+                      }))
+                    }
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl uppercase font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
+                    placeholder="e.g. K.AJAY PRASATH"
+                    required
+                  />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                </div>
+              </div>
+
+              {/* Department & Year Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Department</label>
+                  <select
+                    value={editFormData.departmentOrClass}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({ ...prev, departmentOrClass: e.target.value }))
+                    }
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-semibold focus:bg-white focus:border-indigo-500 outline-none cursor-pointer"
+                  >
+                    {ENGINEERING_DEPARTMENTS.map((d) => (
+                      <option key={d.name} value={d.name}>
+                        {d.code} — {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Year of Study</label>
+                  <select
+                    value={editFormData.yearOrSection}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({ ...prev, yearOrSection: e.target.value }))
+                    }
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-semibold focus:bg-white focus:border-indigo-500 outline-none cursor-pointer"
+                  >
+                    {COLLEGE_YEARS.map((yr) => (
+                      <option key={yr} value={yr}>
+                        {yr}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Residence Category: Day Scholar vs Hostel */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Residence Category
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setEditFormData((prev) => ({ ...prev, isHostel: false }))}
+                    className={`p-2.5 rounded-xl border flex items-center justify-center gap-2 font-semibold transition-all cursor-pointer ${
+                      !editFormData.isHostel
+                        ? 'bg-indigo-50 border-indigo-500 text-indigo-900 ring-2 ring-indigo-100'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Bus className="h-4 w-4 text-indigo-600" />
+                    <span>🚌 Day Scholar (Bus)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        isHostel: true,
+                        busRouteId: '',
+                        stoppingName: '',
+                      }))
+                    }
+                    className={`p-2.5 rounded-xl border flex items-center justify-center gap-2 font-semibold transition-all cursor-pointer ${
+                      editFormData.isHostel
+                        ? 'bg-amber-50 border-amber-500 text-amber-900 ring-2 ring-amber-100'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Home className="h-4 w-4 text-amber-600" />
+                    <span>🏢 Hostel Resident</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Day Scholar Route & Stop selection */}
+              {!editFormData.isHostel ? (
+                <div className="space-y-3 pt-2 border-t border-slate-100">
+                  {/* Bus Route Select */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Engineering Bus Route <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={editFormData.busRouteId}
+                      onChange={(e) => handleEditRouteChange(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-semibold focus:bg-white focus:border-indigo-500 outline-none cursor-pointer"
+                    >
+                      {BUS_ROUTES.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.routeNumber} — {r.name} ({r.stops.length} stops)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Boarding Stop Select */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Boarding Stop <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={editFormData.stoppingName}
+                      onChange={(e) =>
+                        setEditFormData((prev) => ({ ...prev, stoppingName: e.target.value }))
+                      }
+                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-semibold focus:bg-white focus:border-indigo-500 outline-none cursor-pointer"
+                    >
+                      {editAvailableStops.map((st) => (
+                        <option key={st} value={st}>
+                          {st}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-xs">
+                  <span className="font-bold">Campus Resident: </span>
+                  Bus route and boarding stop will be recorded as <span className="font-mono font-bold bg-amber-100 px-1 py-0.5 rounded">NULL</span> in the database.
+                </div>
+              )}
+
+              {/* Modal Footer Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingStudent(null)}
+                  disabled={isSavingEdit}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingEdit ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Saving Changes...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                      <span>Save Changes</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
