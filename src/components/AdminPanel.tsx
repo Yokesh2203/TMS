@@ -19,6 +19,7 @@ import {
   MapPin,
   Loader2,
   User,
+  Hash,
 } from 'lucide-react';
 import { Student } from '../types';
 import {
@@ -34,7 +35,7 @@ import {
 import { updateStudentInDb } from '../services/api';
 
 // Persists which DEPARTMENTS have been manually verified by admin
-const VERIFIED_DEPTS_KEY = 'nscet_tms_verified_departments_v1';
+const VERIFIED_DEPTS_KEY = 'nscet_tms_verified_departments_v2';
 
 interface AdminPanelProps {
   students: Student[];
@@ -53,6 +54,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editFormData, setEditFormData] = useState<{
     studentName: string;
+    identifier: string;
     departmentOrClass: string;
     yearOrSection: string;
     isHostel: boolean;
@@ -60,6 +62,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     stoppingName: string;
   }>({
     studentName: '',
+    identifier: '',
     departmentOrClass: '',
     yearOrSection: '',
     isHostel: false,
@@ -75,6 +78,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setEditingStudent(student);
     setEditFormData({
       studentName: student.studentName || '',
+      identifier: student.identifier || '',
       departmentOrClass: student.departmentOrClass || ENGINEERING_DEPARTMENTS[0].name,
       yearOrSection: student.yearOrSection || COLLEGE_YEARS[3],
       isHostel,
@@ -107,6 +111,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     if (!editingStudent) return;
 
+    const cleanIdentifier = editFormData.identifier.trim();
+    if (!cleanIdentifier) {
+      setEditError('Register Number is required.');
+      return;
+    }
+
     if (!editFormData.studentName.trim()) {
       setEditError('Student full name is required.');
       return;
@@ -124,6 +134,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const route = !editFormData.isHostel ? BUS_ROUTES.find((r) => r.id === editFormData.busRouteId) : null;
       const updatedPayload: Partial<Student> = {
         studentName: editFormData.studentName.trim().toUpperCase(),
+        identifier: cleanIdentifier,
         departmentOrClass: editFormData.departmentOrClass,
         yearOrSection: editFormData.yearOrSection,
         isHostel: editFormData.isHostel,
@@ -141,7 +152,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
       }
 
-      setEditToast(`Updated "${editFormData.studentName.trim().toUpperCase()}" (${editingStudent.identifier}) successfully!`);
+      setEditToast(`Updated "${editFormData.studentName.trim().toUpperCase()}" (${cleanIdentifier}) successfully!`);
       setTimeout(() => setEditToast(null), 4000);
       setEditingStudent(null);
     } catch (err: any) {
@@ -281,11 +292,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return map;
   }, [departmentGapAnalysis]);
 
-  // Determine whether a department is "green" (all students submitted with no gaps, or manually verified)
+  // Determine whether a department is "green" (only if explicitly verified by admin via button)
   const isDeptGreen = (deptName: string): boolean => {
-    const gap = deptGapMap[deptName];
-    if (!gap || gap.totalSubmitted === 0) return false;
-    return !gap.hasGaps || verifiedDepts.has(deptName);
+    return verifiedDepts.has(deptName);
   };
 
   // Combine submitted students with missing register numbers for a complete S.No / Roll Number roster
@@ -488,11 +497,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </p>
         </div>
 
-        {/* Card 2: Departments Complete */}
+        {/* Card 2: Verified Departments */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              {selectedYear !== 'ALL' ? `${selectedYear} Complete Depts` : 'Departments Complete'}
+              {selectedYear !== 'ALL' ? `${selectedYear} Verified Depts` : 'Verified Departments'}
             </span>
             <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <ShieldCheck className="h-4 w-4" />
@@ -504,8 +513,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
             {verifiedGreenDepts === ENGINEERING_DEPARTMENTS.length
-              ? `🎉 All departments in ${selectedYear !== 'ALL' ? selectedYear : 'college'} 100% submitted!`
-              : `${ENGINEERING_DEPARTMENTS.length - verifiedGreenDepts} departments pending completion`}
+              ? `🎉 All ${ENGINEERING_DEPARTMENTS.length} departments verified and highlighted by admin!`
+              : `${verifiedGreenDepts} of ${ENGINEERING_DEPARTMENTS.length} departments verified by admin`}
           </p>
         </div>
 
@@ -768,34 +777,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
 
                   {/* Verify / Unverify Button */}
-                  {canVerify ? (
-                    <button
-                      type="button"
-                      onClick={() => toggleDeptVerification(selectedDept)}
-                      className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        isVerified
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
-                          : 'bg-white hover:bg-emerald-50 text-emerald-700 border-2 border-emerald-500 hover:border-emerald-600'
-                      }`}
-                    >
-                      {isVerified ? (
-                        <>
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          <span>Verified ✓</span>
-                        </>
-                      ) : (
-                        <>
-                          <ShieldCheck className="h-3.5 w-3.5" />
-                          <span>Mark as Verified</span>
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                      Fix {singleDeptGapResult.missingCount} gaps first
-                    </span>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => toggleDeptVerification(selectedDept)}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isVerified
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-200'
+                        : 'bg-white hover:bg-emerald-50 text-emerald-700 border-2 border-emerald-500 hover:border-emerald-600 shadow-xs'
+                    }`}
+                    title={isVerified ? 'Click to unverify and remove green highlight' : 'Click to verify and highlight department in green'}
+                  >
+                    {isVerified ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        <span>Verified &amp; Highlighted ✓</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Verify &amp; Highlight</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
 
@@ -931,15 +934,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </div>
                     )}
 
-                    {/* Verify Button or Status Message */}
-                    {canVerify && (
-                      <div className="mt-2">
-                        <div className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-100/90 text-emerald-800 border border-emerald-300">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                          <span>All Students Submitted ✓</span>
-                        </div>
-                      </div>
-                    )}
+                    {/* Verify & Highlight Button for Admin */}
+                    <div className="mt-3 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleDeptVerification(dept.name);
+                        }}
+                        className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          isVerified
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs ring-1 ring-emerald-300'
+                            : 'bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-500 hover:border-emerald-600 shadow-2xs'
+                        }`}
+                        title={isVerified ? 'Click to unverify and remove green highlight' : 'Click to verify and highlight in green'}
+                      >
+                        {isVerified ? (
+                          <>
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            <span>Verified &amp; Highlighted ✓</span>
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                            <span>Verify &amp; Highlight</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                     {!hasStudents && (
                       <div className="text-[11px] text-slate-400 italic">No submissions recorded for {selectedYear !== 'ALL' ? selectedYear : 'this selection'}</div>
                     )}
@@ -1306,6 +1328,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <span>{editError}</span>
                 </div>
               )}
+
+              {/* Register Number */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Register Number (12-Digit Anna Univ Reg No) <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={editFormData.identifier}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        identifier: e.target.value.trim(),
+                      }))
+                    }
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none tracking-wider text-xs"
+                    placeholder="e.g. 921023243001"
+                    required
+                  />
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Admins can correct typos or update the student's register number.
+                </p>
+              </div>
 
               {/* Student Name */}
               <div>
