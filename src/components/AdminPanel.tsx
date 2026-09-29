@@ -703,43 +703,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
 
-      {/* Department Gap Analysis + Verify Button */}
+      {/* Department Overview & Verification */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-base font-bold text-slate-900">
-                Department-Separated Register Number Gap Analysis
+                Department Overview &amp; Verification
               </h3>
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${totalMissingCount > 0
                   ? 'bg-rose-100 text-rose-700 border border-rose-200'
                   : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
                 }`}>
-                {totalMissingCount > 0 ? `${totalMissingCount} Missing` : 'All Consecutive'}
+                {totalMissingCount > 0 ? `${totalMissingCount} Missing in Sequence` : 'All Consecutive'}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Gaps are evaluated strictly per department series. Cross-department comparisons never occur.
-              Once a department has no missing numbers, you can mark it as <strong>Verified</strong>.
+              Review submission progress per department. Click <strong>Verify</strong> on any department to confirm and highlight it in green.
             </p>
           </div>
-          {totalMissingCount > 0 && (
-            <button
-              type="button"
-              onClick={handleExportMissingCSV}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white shadow-xs transition-colors cursor-pointer self-start sm:self-center"
-            >
-              <FileDown className="h-3.5 w-3.5" />
-              <span>Export Missing CSV</span>
-            </button>
-          )}
         </div>
 
         {/* === SINGLE DEPARTMENT VIEW (dept pill selected) === */}
         {selectedDept !== 'ALL' && singleDeptGapResult && (() => {
           const isGreen = isDeptGreen(selectedDept);
           const isVerified = verifiedDepts.has(selectedDept);
-          const canVerify = !singleDeptGapResult.hasGaps && singleDeptGapResult.totalSubmitted > 0;
 
           return (
             <div className="space-y-3">
@@ -753,7 +741,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="flex items-center gap-2 font-semibold text-slate-900">
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <span>{selectedDept}</span>
+                      <span className="text-sm font-bold">{selectedDept}</span>
                       <span className="text-slate-400 font-normal">({getDeptShortCode(selectedDept)})</span>
                       {isGreen && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
                     </div>
@@ -764,8 +752,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   {/* Stats */}
                   <div className="flex flex-wrap items-center gap-3 text-slate-600 font-mono text-[11px]">
                     <span>Submitted: <strong>{singleDeptGapResult.totalSubmitted}</strong></span>
-                    <span>Min: <strong>{singleDeptGapResult.minRegisterNumber || '—'}</strong></span>
-                    <span>Max: <strong>{singleDeptGapResult.maxRegisterNumber || '—'}</strong></span>
+                    <span>Min Reg No: <strong>{singleDeptGapResult.minRegisterNumber || '—'}</strong></span>
+                    <span>Max Reg No: <strong>{singleDeptGapResult.maxRegisterNumber || '—'}</strong></span>
                     <span className={singleDeptGapResult.hasGaps ? 'text-rose-600 font-bold' : 'text-emerald-600 font-bold'}>
                       Missing: {singleDeptGapResult.missingCount}
                     </span>
@@ -796,75 +784,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
 
-              {/* Gap content */}
-              {singleDeptGapResult.totalSubmitted === 0 ? (
-                <div className="py-6 text-center text-slate-500 text-xs">
+              {singleDeptGapResult.totalSubmitted === 0 && (
+                <div className="py-4 text-center text-slate-400 text-xs">
                   No submitted records for this department yet.
-                </div>
-              ) : singleDeptGapResult.hasGaps ? (
-                <div className="overflow-hidden border border-slate-200 rounded-2xl shadow-xs">
-                  <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-bold text-slate-700 text-xs">
-                      {singleDeptGapResult.missingCount} Students Not Yet Submitted (Pending from S.No 1)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(singleDeptGapResult.missingNumbers.join('\n'));
-                        setCopiedText('DEPT_MISSING');
-                        setTimeout(() => setCopiedText(null), 2000);
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer shadow-xs"
-                    >
-                      {copiedText === 'DEPT_MISSING' ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
-                      <span>{copiedText === 'DEPT_MISSING' ? 'Copied All!' : 'Copy Missing Register Numbers'}</span>
-                    </button>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto">
-                    <table className="w-full text-left border-collapse text-xs">
-                      <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                        <tr>
-                          <th className="py-2.5 px-4 w-16">S.No</th>
-                          <th className="py-2.5 px-4">Missing Register Number</th>
-                          <th className="py-2.5 px-4">Department</th>
-                          <th className="py-2.5 px-4">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
-                        {singleDeptGapResult.missingNumbers.map((missingId) => {
-                          const roll = extractRollNumber(missingId);
-                          return (
-                            <tr key={missingId} className="hover:bg-rose-50/30 transition-colors group">
-                              <td className="py-2.5 px-4 font-mono font-bold text-slate-600">#{roll ? roll.rollNo : '-'}</td>
-                              <td className="py-2.5 px-4 font-mono font-bold text-rose-700 whitespace-nowrap">{missingId}</td>
-                              <td className="py-2.5 px-4 whitespace-nowrap">
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                  {getDeptShortCode(selectedDept)}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-4 whitespace-nowrap">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
-                                  Not Submitted
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3 bg-emerald-50/70 border border-emerald-200 p-4 rounded-2xl text-emerald-900">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-                  <div className="text-xs">
-                    <span className="font-bold">Continuous Sequence: </span>
-                    All submitted register numbers starting from <strong>{singleDeptGapResult.minRegisterNumber}</strong> up to{' '}
-                    <strong>{singleDeptGapResult.maxRegisterNumber}</strong> are consecutive with no missing students.
-                    {!isVerified && (
-                      <span className="ml-1 text-emerald-700 font-semibold">Click "Mark as Verified" above to confirm.</span>
-                    )}
-                  </div>
                 </div>
               )}
             </div>
@@ -882,7 +804,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 const isVerified = verifiedDepts.has(dept.name);
                 const hasStudents = gapInfo && gapInfo.totalSubmitted > 0;
                 const hasGaps = gapInfo?.hasGaps ?? false;
-                const canVerify = hasStudents && !hasGaps;
 
                 return (
                   <div
@@ -912,7 +833,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             ? 'bg-rose-100 text-rose-700'
                             : 'bg-slate-200 text-slate-700'
                         }`}>
-                        {isGreen ? '✓ 100% Submitted' : hasGaps ? `${gapInfo!.missingCount} Missing` : 'No Data'}
+                        {isGreen ? '✓ Verified' : hasGaps ? `${gapInfo!.missingCount} Missing` : 'No Data'}
                       </span>
                     </div>
 
@@ -921,12 +842,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <div className="text-[11px] text-slate-600 font-mono mb-2 flex items-center justify-between">
                         <span>Submitted: <strong className="text-slate-900">{gapInfo.totalSubmitted}</strong></span>
                         <span className={isGreen ? 'text-emerald-700 font-bold' : hasGaps ? 'text-rose-600 font-bold' : 'text-slate-500'}>
-                          {isGreen ? 'Continuous (0 gaps)' : `${gapInfo.missingCount} Missing`}
+                          {hasGaps ? `${gapInfo.missingCount} Missing` : 'Continuous (0 gaps)'}
                         </span>
                       </div>
                     )}
 
-                    {/* Verify & Highlight Button for Admin */}
+                    {/* Verify Button for Admin */}
                     <div className="mt-3 pt-2 border-t border-slate-100">
                       <button
                         type="button"
@@ -959,55 +880,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     {hasStudents && hasGaps && (
                       <div className="text-[11px] text-rose-600 font-semibold flex items-center gap-1 mt-1">
                         <AlertTriangle className="h-3 w-3" />
-                        {gapInfo!.missingCount} student register numbers missing
+                        {gapInfo!.missingCount} missing register numbers
                       </div>
                     )}
                   </div>
                 );
               })}
             </div>
-
-            {/* Missing numbers table (for departments with gaps) */}
-            {departmentGapAnalysis.totalMissingCount > 0 && (
-              <div className="overflow-hidden border border-slate-200 rounded-2xl shadow-xs">
-                <div className="max-h-72 overflow-y-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600 shadow-xs">
-                      <tr>
-                        <th className="py-2.5 px-4 w-16">S.No</th>
-                        <th className="py-2.5 px-4">Missing Register Number</th>
-                        <th className="py-2.5 px-4">Department</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {departmentGapAnalysis.departmentReports.flatMap((rep) =>
-                        rep.missingNumbers.map((missingId) => ({ missingId, department: rep.department }))
-                      ).map((item, index) => (
-                        <tr key={`${item.department}-${item.missingId}`} className="hover:bg-rose-50/30 transition-colors group">
-                          <td className="py-2.5 px-4 font-mono text-slate-500">{index + 1}</td>
-                          <td className="py-2.5 px-4 font-mono font-bold text-rose-700 whitespace-nowrap">{item.missingId}</td>
-                          <td className="py-2.5 px-4 whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                              {getDeptShortCode(item.department)}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {departmentGapAnalysis.totalMissingCount === 0 && yearFilteredStudents.length > 0 && (
-              <div className="flex items-center gap-3 bg-emerald-50/70 border border-emerald-200 p-4 rounded-2xl text-emerald-900">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-                <div className="text-xs">
-                  <span className="font-bold">Zero Missing Register Numbers: </span>
-                  All submitted series {selectedYear !== 'ALL' ? `for ${selectedYear}` : 'across all departments'} are completely continuous!
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
