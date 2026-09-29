@@ -519,26 +519,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
 
         {/* Card 3: Missing Register Numbers */}
-        <div className={`rounded-2xl p-5 border shadow-xs transition-all ${
-          totalMissingCount > 0
+        <div className={`rounded-2xl p-5 border shadow-xs transition-all ${totalMissingCount > 0
             ? 'bg-rose-50/70 border-rose-200/90 text-rose-950'
             : 'bg-emerald-50/70 border-emerald-200/90 text-emerald-950'
-        }`}>
+          }`}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold uppercase tracking-wider opacity-75">Missing Register Numbers</span>
-            <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
-              totalMissingCount > 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
-            }`}>
+            <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${totalMissingCount > 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
+              }`}>
               {totalMissingCount > 0 ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
             </div>
           </div>
           <div className="text-2xl font-extrabold font-mono">{totalMissingCount}</div>
           <p className="text-[11px] opacity-80 mt-1">
-            {totalMissingCount > 0 
+            {totalMissingCount > 0
               ? `Gaps detected ${selectedYear !== 'ALL' ? `in ${selectedYear}` : '— per department series'}`
               : yearFilteredStudents.length === 0
-              ? `No submissions recorded ${selectedYear !== 'ALL' ? `for ${selectedYear}` : 'yet'}`
-              : `Continuous sequence ${selectedYear !== 'ALL' ? `for ${selectedYear}` : ''} — no gaps found`}
+                ? `No submissions recorded ${selectedYear !== 'ALL' ? `for ${selectedYear}` : 'yet'}`
+                : `Continuous sequence ${selectedYear !== 'ALL' ? `for ${selectedYear}` : ''} — no gaps found`}
           </p>
         </div>
       </div>
@@ -614,11 +612,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <button
               type="button"
               onClick={() => setSelectedDept('ALL')}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
-                selectedDept === 'ALL'
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${selectedDept === 'ALL'
                   ? 'bg-blue-50/90 text-blue-700 border-2 border-blue-600 shadow-xs ring-2 ring-blue-100 font-bold'
                   : 'bg-white text-slate-700 border border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-              }`}
+                }`}
             >
               <span>All Departments</span>
               {selectedDept === 'ALL' ? (
@@ -657,8 +654,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     isGreen
                       ? `${dept.name} — All ${selectedYear !== 'ALL' ? selectedYear : ''} students submitted! (${gapInfo?.totalSubmitted || 0} students, 0 gaps) ✓`
                       : hasGaps
-                      ? `${dept.name} — ${gapInfo?.missingCount} missing register numbers in sequence`
-                      : dept.name
+                        ? `${dept.name} — ${gapInfo?.missingCount} missing register numbers in sequence`
+                        : dept.name
                   }
                 >
                   <span>{dept.code}</span>
@@ -714,11 +711,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <h3 className="text-base font-bold text-slate-900">
                 Department-Separated Register Number Gap Analysis
               </h3>
-              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                totalMissingCount > 0
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${totalMissingCount > 0
                   ? 'bg-rose-100 text-rose-700 border border-rose-200'
                   : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-              }`}>
+                }`}>
                 {totalMissingCount > 0 ? `${totalMissingCount} Missing` : 'All Consecutive'}
               </span>
             </div>
@@ -748,13 +744,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           return (
             <div className="space-y-3">
               {/* Department Info Row */}
-              <div className={`p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-3 text-xs ${
-                isGreen
+              <div className={`p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-3 text-xs ${isGreen
                   ? 'bg-emerald-50/70 border-emerald-300'
                   : singleDeptGapResult.hasGaps
-                  ? 'bg-rose-50/50 border-rose-200'
-                  : 'bg-indigo-50/50 border-indigo-100'
-              }`}>
+                    ? 'bg-rose-50/50 border-rose-200'
+                    : 'bg-indigo-50/50 border-indigo-100'
+                }`}>
                 <div className="flex items-center gap-2 font-semibold text-slate-900">
                   <div>
                     <div className="flex items-center gap-1.5">
@@ -780,22 +775,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <button
                     type="button"
                     onClick={() => toggleDeptVerification(selectedDept)}
-                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      isVerified
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${isVerified
                         ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-200'
                         : 'bg-white hover:bg-emerald-50 text-emerald-700 border-2 border-emerald-500 hover:border-emerald-600 shadow-xs'
-                    }`}
+                      }`}
                     title={isVerified ? 'Click to unverify and remove green highlight' : 'Click to verify and highlight department in green'}
                   >
                     {isVerified ? (
                       <>
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span>Verified &amp; Highlighted ✓</span>
+                        <span>Verified ✓</span>
                       </>
                     ) : (
                       <>
                         <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                        <span>Verify &amp; Highlight</span>
+                        <span>Verify</span>
                       </>
                     )}
                   </button>
@@ -893,13 +887,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 return (
                   <div
                     key={dept.code}
-                    className={`p-3.5 rounded-2xl border transition-all ${
-                      isGreen
+                    className={`p-3.5 rounded-2xl border transition-all ${isGreen
                         ? 'bg-emerald-50/80 border-emerald-400 ring-2 ring-emerald-200/80 shadow-xs'
                         : hasGaps
-                        ? 'bg-rose-50/40 border-rose-200 shadow-2xs'
-                        : 'bg-slate-50/80 border-slate-200'
-                    }`}
+                          ? 'bg-rose-50/40 border-rose-200 shadow-2xs'
+                          : 'bg-slate-50/80 border-slate-200'
+                      }`}
                   >
                     {/* Card Header */}
                     <div className="flex items-center justify-between mb-2">
@@ -913,13 +906,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         {isGreen && <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />}
                       </span>
 
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        isGreen
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${isGreen
                           ? 'bg-emerald-600 text-white shadow-2xs'
                           : hasGaps
-                          ? 'bg-rose-100 text-rose-700'
-                          : 'bg-slate-200 text-slate-700'
-                      }`}>
+                            ? 'bg-rose-100 text-rose-700'
+                            : 'bg-slate-200 text-slate-700'
+                        }`}>
                         {isGreen ? '✓ 100% Submitted' : hasGaps ? `${gapInfo!.missingCount} Missing` : 'No Data'}
                       </span>
                     </div>
@@ -942,22 +934,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           e.stopPropagation();
                           toggleDeptVerification(dept.name);
                         }}
-                        className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          isVerified
+                        className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${isVerified
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs ring-1 ring-emerald-300'
                             : 'bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-500 hover:border-emerald-600 shadow-2xs'
-                        }`}
+                          }`}
                         title={isVerified ? 'Click to unverify and remove green highlight' : 'Click to verify and highlight in green'}
                       >
                         {isVerified ? (
                           <>
                             <CheckCircle2 className="h-3.5 w-3.5" />
-                            <span>Verified &amp; Highlighted ✓</span>
+                            <span>Verified ✓</span>
                           </>
                         ) : (
                           <>
                             <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                            <span>Verify &amp; Highlight</span>
+                            <span>Verify</span>
                           </>
                         )}
                       </button>
@@ -1026,39 +1017,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <div className="p-4 sm:px-6 sm:py-4 border-b border-slate-200/80 bg-slate-50/60 flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="text-sm sm:text-base font-bold text-slate-900">Student Register</h3>
-            
+
             {/* View Filter: All Slots vs Submitted Only vs Not Submitted */}
             <div className="inline-flex items-center bg-slate-200/70 p-0.5 rounded-xl text-xs font-semibold">
               <button
                 type="button"
                 onClick={() => setTableRosterView('all_slots')}
-                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                  tableRosterView === 'all_slots'
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${tableRosterView === 'all_slots'
                     ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
-                }`}
+                  }`}
               >
                 All Slots ({totalRosterCount})
               </button>
               <button
                 type="button"
                 onClick={() => setTableRosterView('submitted')}
-                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                  tableRosterView === 'submitted'
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${tableRosterView === 'submitted'
                     ? 'bg-white text-emerald-800 shadow-xs'
                     : 'text-slate-600 hover:text-emerald-700'
-                }`}
+                  }`}
               >
                 Submitted ({submittedCount})
               </button>
               <button
                 type="button"
                 onClick={() => setTableRosterView('missing')}
-                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                  tableRosterView === 'missing'
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${tableRosterView === 'missing'
                     ? 'bg-white text-rose-700 shadow-xs'
                     : 'text-slate-600 hover:text-rose-700'
-                }`}
+                  }`}
               >
                 Not Submitted ({missingCount})
               </button>
@@ -1148,11 +1136,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 rosterItems.map((item) => (
                   <tr
                     key={item.key}
-                    className={`transition-colors group ${
-                      item.isSubmitted
+                    className={`transition-colors group ${item.isSubmitted
                         ? 'hover:bg-slate-50/80 bg-white'
                         : 'bg-rose-50/25 hover:bg-rose-50/50'
-                    }`}
+                      }`}
                   >
                     {/* S.No / Roll Number */}
                     <td className="py-3.5 px-4 sm:px-5 font-mono font-bold text-sm whitespace-nowrap">
@@ -1164,11 +1151,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     {/* Register Number */}
                     <td className="py-3.5 px-4 sm:px-5 font-mono font-bold text-slate-900 whitespace-nowrap text-sm">
                       <div className="flex items-center gap-2">
-                        <span className={`px-2.5 py-1 rounded-lg border text-xs font-mono font-bold tracking-wider ${
-                          item.isSubmitted
+                        <span className={`px-2.5 py-1 rounded-lg border text-xs font-mono font-bold tracking-wider ${item.isSubmitted
                             ? 'bg-slate-100 text-slate-900 border-slate-200/80 shadow-2xs'
                             : 'bg-rose-100/50 text-rose-800 border-rose-200'
-                        }`}>
+                          }`}>
                           {item.identifier}
                         </span>
                         <button
@@ -1424,11 +1410,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <button
                     type="button"
                     onClick={() => setEditFormData((prev) => ({ ...prev, isHostel: false }))}
-                    className={`p-2.5 rounded-xl border flex items-center justify-center gap-2 font-semibold transition-all cursor-pointer ${
-                      !editFormData.isHostel
+                    className={`p-2.5 rounded-xl border flex items-center justify-center gap-2 font-semibold transition-all cursor-pointer ${!editFormData.isHostel
                         ? 'bg-indigo-50 border-indigo-500 text-indigo-900 ring-2 ring-indigo-100'
                         : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
+                      }`}
                   >
                     <Bus className="h-4 w-4 text-indigo-600" />
                     <span>🚌 Day Scholar (Bus)</span>
@@ -1444,11 +1429,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         stoppingName: '',
                       }))
                     }
-                    className={`p-2.5 rounded-xl border flex items-center justify-center gap-2 font-semibold transition-all cursor-pointer ${
-                      editFormData.isHostel
+                    className={`p-2.5 rounded-xl border flex items-center justify-center gap-2 font-semibold transition-all cursor-pointer ${editFormData.isHostel
                         ? 'bg-amber-50 border-amber-500 text-amber-900 ring-2 ring-amber-100'
                         : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
+                      }`}
                   >
                     <Home className="h-4 w-4 text-amber-600" />
                     <span>🏢 Hostel Resident</span>
