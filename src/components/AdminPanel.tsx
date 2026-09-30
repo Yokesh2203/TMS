@@ -200,8 +200,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  // Department filter: 'ALL' or department full name
-  const [selectedDept, setSelectedDept] = useState<string>('ALL');
+  // Department filter: default to first engineering department (no 'ALL' option)
+  const [selectedDept, setSelectedDept] = useState<string>(ENGINEERING_DEPARTMENTS[0].name);
 
   // Year filter
   const [selectedYear, setSelectedYear] = useState<string>('ALL');
@@ -249,7 +249,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Filter students based on Department, Year, and Search Query
   const filteredStudents = useMemo(() => {
     return students.filter((s) => {
-      if (selectedDept !== 'ALL' && s.departmentOrClass !== selectedDept) return false;
+      if (s.departmentOrClass !== selectedDept) return false;
       if (selectedYear !== 'ALL' && s.yearOrSection !== selectedYear) return false;
 
       if (searchQuery.trim()) {
@@ -301,20 +301,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Single Department Gap Result (strictly filtered by selectedDept AND selectedYear!)
   const singleDeptGapResult = useMemo(() => {
-    if (selectedDept === 'ALL') return null;
     const ids = yearFilteredStudents
       .filter((s) => s.departmentOrClass === selectedDept)
       .map((s) => s.identifier);
     return detectRegisterNumberGaps(ids);
   }, [yearFilteredStudents, selectedDept]);
 
-  // Total missing count for the KPI card
+  // Total missing count for the selected department
   const totalMissingCount = useMemo(() => {
-    if (selectedDept !== 'ALL') {
-      return singleDeptGapResult ? singleDeptGapResult.missingCount : 0;
-    }
-    return departmentGapAnalysis.totalMissingCount;
-  }, [selectedDept, singleDeptGapResult, departmentGapAnalysis]);
+    return singleDeptGapResult ? singleDeptGapResult.missingCount : 0;
+  }, [singleDeptGapResult]);
 
   // Build a quick lookup: deptName -> { hasGaps, totalSubmitted, minReg, maxReg }
   const deptGapMap = useMemo(() => {
@@ -336,10 +332,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Combine submitted students with missing register numbers for a complete S.No / Roll Number roster
   const rosterItems = useMemo(() => {
-    // Determine which missing numbers belong to current department/filter
-    const missingList = selectedDept === 'ALL'
-      ? departmentGapAnalysis.allMissingNumbers
-      : (singleDeptGapResult?.missingNumbers || []);
+    const missingList = singleDeptGapResult?.missingNumbers || [];
 
     const submittedItems = sortedStudents.map((s, idx) => {
       const rollInfo = extractRollNumber(s.identifier);
@@ -517,64 +510,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     <div className="space-y-6">
 
 
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Card 1: Total Submitted */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Submitted</span>
-            <div className="h-8 w-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <Layers className="h-4 w-4" />
+      {/* Verified Departments Stat Banner */}
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-5 border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3.5">
+          <div className="h-11 w-11 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+            <ShieldCheck className="h-6 w-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                {selectedYear !== 'ALL' ? `${selectedYear} Verified Departments` : 'Verified Departments'}
+              </span>
+              <span className="font-mono text-xs font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                {verifiedGreenDepts} / {ENGINEERING_DEPARTMENTS.length} Depts
+              </span>
             </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {verifiedGreenDepts === ENGINEERING_DEPARTMENTS.length
+                ? `🎉 All ${ENGINEERING_DEPARTMENTS.length} departments verified and highlighted by admin!`
+                : `${verifiedGreenDepts} of ${ENGINEERING_DEPARTMENTS.length} departments verified by admin`}
+            </p>
           </div>
-          <div className="text-2xl font-extrabold text-slate-900 font-mono">{filteredStudents.length}</div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {selectedDept === 'ALL' ? 'All departments' : selectedDept}
-            {selectedYear !== 'ALL' && ` • ${selectedYear}`}
-          </p>
-        </div>
-
-        {/* Card 2: Verified Departments */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              {selectedYear !== 'ALL' ? `${selectedYear} Verified Depts` : 'Verified Departments'}
-            </span>
-            <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <ShieldCheck className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2 font-mono">
-            <span className="text-2xl font-extrabold text-emerald-600">{verifiedGreenDepts}</span>
-            <span className="text-xs text-slate-400 font-semibold">/ {ENGINEERING_DEPARTMENTS.length} Depts</span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {verifiedGreenDepts === ENGINEERING_DEPARTMENTS.length
-              ? `🎉 All ${ENGINEERING_DEPARTMENTS.length} departments verified and highlighted by admin!`
-              : `${verifiedGreenDepts} of ${ENGINEERING_DEPARTMENTS.length} departments verified by admin`}
-          </p>
-        </div>
-
-        {/* Card 3: Missing Register Numbers */}
-        <div className={`rounded-2xl p-5 border shadow-xs transition-all ${totalMissingCount > 0
-            ? 'bg-rose-50/70 border-rose-200/90 text-rose-950'
-            : 'bg-emerald-50/70 border-emerald-200/90 text-emerald-950'
-          }`}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider opacity-75">Missing Register Numbers</span>
-            <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${totalMissingCount > 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
-              }`}>
-              {totalMissingCount > 0 ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-            </div>
-          </div>
-          <div className="text-2xl font-extrabold font-mono">{totalMissingCount}</div>
-          <p className="text-[11px] opacity-80 mt-1">
-            {totalMissingCount > 0
-              ? `Gaps detected ${selectedYear !== 'ALL' ? `in ${selectedYear}` : '— per department series'}`
-              : yearFilteredStudents.length === 0
-                ? `No submissions recorded ${selectedYear !== 'ALL' ? `for ${selectedYear}` : 'yet'}`
-                : `Continuous sequence ${selectedYear !== 'ALL' ? `for ${selectedYear}` : ''} — no gaps found`}
-          </p>
         </div>
       </div>
 
@@ -626,42 +582,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </div>
 
-        {/* Row 2: Department Filter Pills */}
+        {/* Row 2: Department Filter Pills (No 'All Departments' option) */}
         <div className="pt-3 border-t border-slate-100">
           <div className="flex items-center justify-between mb-2.5">
             <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
               <span>Select Department</span>
-              <span className="text-[10px] font-normal text-slate-400 lowercase">(click pill to filter)</span>
+              <span className="text-[10px] font-normal text-slate-400 lowercase">(click pill to switch department)</span>
             </label>
-            {selectedDept !== 'ALL' && (
-              <button
-                type="button"
-                onClick={() => setSelectedDept('ALL')}
-                className="text-[11px] font-semibold text-indigo-600 hover:underline cursor-pointer"
-              >
-                Clear Department Filter
-              </button>
-            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* All Departments Pill */}
-            <button
-              type="button"
-              onClick={() => setSelectedDept('ALL')}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${selectedDept === 'ALL'
-                  ? 'bg-blue-50/90 text-blue-700 border-2 border-blue-600 shadow-xs ring-2 ring-blue-100 font-bold'
-                  : 'bg-white text-slate-700 border border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                }`}
-            >
-              <span>All Departments</span>
-              {selectedDept === 'ALL' ? (
-                <Check className="h-3.5 w-3.5 text-blue-600 stroke-[3]" />
-              ) : (
-                <span className="text-slate-400 font-bold ml-0.5 text-xs">+</span>
-              )}
-            </button>
-
             {/* Engineering Department Pills */}
             {ENGINEERING_DEPARTMENTS.map((dept) => {
               const isSelected = selectedDept === dept.name;
@@ -685,11 +615,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <button
                   key={dept.code}
                   type="button"
-                  onClick={() => setSelectedDept(isSelected ? 'ALL' : dept.name)}
+                  onClick={() => setSelectedDept(dept.name)}
                   className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${pillClass}`}
                   title={
                     isGreen
-                      ? `${dept.name} — All ${selectedYear !== 'ALL' ? selectedYear : ''} students submitted! (${gapInfo?.totalSubmitted || 0} students, 0 gaps) ✓`
+                      ? `${dept.name} — Verified by admin ✓`
                       : hasGaps
                         ? `${dept.name} — ${gapInfo?.missingCount} missing register numbers in sequence`
                         : dept.name
@@ -714,9 +644,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* Filter Summary */}
         <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 pt-3 border-t border-slate-100">
           <div>
-            Showing <strong>{sortedStudents.length}</strong> of <strong>{students.length}</strong> total students
-            {selectedDept !== 'ALL' && <span className="ml-1 text-indigo-700 font-semibold">• {selectedDept}</span>}
-            {selectedYear !== 'ALL' && <span className="ml-1 text-indigo-700 font-semibold">• {selectedYear}</span>}
+            Showing <strong>{sortedStudents.length}</strong> students in <span className="text-indigo-700 font-bold">{selectedDept}</span>
+            {selectedYear !== 'ALL' && <span className="ml-1 text-slate-700 font-semibold">• {selectedYear}</span>}
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -727,10 +656,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <ArrowUpDown className="h-3 w-3" />
               <span>Reg No: <strong className="text-indigo-600 uppercase">{sortOrder}</strong></span>
             </button>
-            {(selectedDept !== 'ALL' || selectedYear !== 'ALL' || searchQuery) && (
+            {(selectedDept !== ENGINEERING_DEPARTMENTS[0].name || selectedYear !== 'ALL' || searchQuery) && (
               <button
                 type="button"
-                onClick={() => { setSelectedDept('ALL'); setSelectedYear('ALL'); setSearchQuery(''); }}
+                onClick={() => { setSelectedDept(ENGINEERING_DEPARTMENTS[0].name); setSelectedYear('ALL'); setSearchQuery(''); }}
                 className="text-xs font-semibold text-rose-600 hover:underline cursor-pointer"
               >
                 Reset Filters
@@ -756,13 +685,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Review submission progress per department. Click <strong>Verify</strong> on any department to confirm and highlight it in green.
+              Review submission progress for <strong>{selectedDept}</strong>. Click <strong>Verify</strong> to confirm and highlight it in green.
             </p>
           </div>
         </div>
 
-        {/* === SINGLE DEPARTMENT VIEW (dept pill selected) === */}
-        {selectedDept !== 'ALL' && singleDeptGapResult && (() => {
+        {/* Selected Department Info Card */}
+        {singleDeptGapResult && (() => {
           const isGreen = isDeptGreen(selectedDept);
           const isVerified = verifiedDepts.has(selectedDept);
 
@@ -870,103 +799,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           );
         })()}
-
-        {/* === ALL DEPARTMENTS VIEW === */}
-        {selectedDept === 'ALL' && (
-          <div className="space-y-4">
-            {/* Department Summary Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {ENGINEERING_DEPARTMENTS.map((dept) => {
-                const gapInfo = deptGapMap[dept.name];
-                const isGreen = isDeptGreen(dept.name);
-                const isVerified = verifiedDepts.has(dept.name);
-                const hasStudents = gapInfo && gapInfo.totalSubmitted > 0;
-                const hasGaps = gapInfo?.hasGaps ?? false;
-
-                return (
-                  <div
-                    key={dept.code}
-                    className={`p-3.5 rounded-2xl border transition-all ${isGreen
-                        ? 'bg-emerald-50/80 border-emerald-400 ring-2 ring-emerald-200/80 shadow-xs'
-                        : hasGaps
-                          ? 'bg-rose-50/40 border-rose-200 shadow-2xs'
-                          : 'bg-slate-50/80 border-slate-200'
-                      }`}
-                  >
-                    {/* Card Header */}
-                    <div className="flex items-center justify-between mb-2">
-                      <span
-                        className="font-bold text-xs flex items-center gap-1.5 cursor-pointer hover:underline"
-                        onClick={() => setSelectedDept(dept.name)}
-                        title={`Filter by ${dept.name}`}
-                      >
-                        <span className={isGreen ? 'text-emerald-950 font-extrabold' : 'text-slate-900'}>{dept.code}</span>
-                        <span className="text-[11px] text-slate-500 font-normal">({dept.name})</span>
-                        {isGreen && <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />}
-                      </span>
-
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${isGreen
-                          ? 'bg-emerald-600 text-white shadow-2xs'
-                          : hasGaps
-                            ? 'bg-rose-100 text-rose-700'
-                            : 'bg-slate-200 text-slate-700'
-                        }`}>
-                        {isGreen ? '✓ Verified' : hasGaps ? `${gapInfo!.missingCount} Missing` : 'No Data'}
-                      </span>
-                    </div>
-
-                    {/* Stats Row */}
-                    {hasStudents && gapInfo && (
-                      <div className="text-[11px] text-slate-600 font-mono mb-2 flex items-center justify-between">
-                        <span>Submitted: <strong className="text-slate-900">{gapInfo.totalSubmitted}</strong></span>
-                        <span className={isGreen ? 'text-emerald-700 font-bold' : hasGaps ? 'text-rose-600 font-bold' : 'text-slate-500'}>
-                          {hasGaps ? `${gapInfo.missingCount} Missing` : 'Continuous (0 gaps)'}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Verify Button for Admin */}
-                    <div className="mt-3 pt-2 border-t border-slate-100">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleDeptVerification(dept.name);
-                        }}
-                        className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${isVerified
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs ring-1 ring-emerald-300'
-                            : 'bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-500 hover:border-emerald-600 shadow-2xs'
-                          }`}
-                        title={isVerified ? 'Click to unverify and remove green highlight' : 'Click to verify and highlight in green'}
-                      >
-                        {isVerified ? (
-                          <>
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            <span>Verified ✓</span>
-                          </>
-                        ) : (
-                          <>
-                            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                            <span>Verify</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    {!hasStudents && (
-                      <div className="text-[11px] text-slate-400 italic">No submissions recorded for {selectedYear !== 'ALL' ? selectedYear : 'this selection'}</div>
-                    )}
-                    {hasStudents && hasGaps && (
-                      <div className="text-[11px] text-rose-600 font-semibold flex items-center gap-1 mt-1">
-                        <AlertTriangle className="h-3 w-3" />
-                        {gapInfo!.missingCount} missing register numbers
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Student Records Table with S.No Roster View */}
