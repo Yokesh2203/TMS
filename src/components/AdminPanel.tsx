@@ -111,9 +111,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     if (!editingStudent) return;
 
-    const cleanIdentifier = editFormData.identifier.trim();
+    const cleanIdentifier = editFormData.identifier.trim().replace(/\D/g, '').slice(0, 12);
     if (!cleanIdentifier) {
       setEditError('Register Number is required.');
+      return;
+    }
+    if (cleanIdentifier.length !== 12) {
+      setEditError(`Register Number must be exactly 12 digits (currently ${cleanIdentifier.length} digits).`);
       return;
     }
 
@@ -1196,19 +1200,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
               {/* Register Number */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Register Number (12-Digit Anna Univ Reg No) <span className="text-rose-500">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Register Number (12 Digits Only) <span className="text-rose-500">*</span>
+                  </label>
+                  <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                    editFormData.identifier.length === 12
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-amber-50 text-amber-700 border border-amber-200'
+                  }`}>
+                    {editFormData.identifier.length}/12 digits
+                  </span>
+                </div>
                 <div className="relative">
                   <input
                     type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={12}
                     value={editFormData.identifier}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 12);
                       setEditFormData((prev) => ({
                         ...prev,
-                        identifier: e.target.value.trim(),
-                      }))
-                    }
+                        identifier: digitsOnly,
+                      }));
+                    }}
                     className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none tracking-wider text-xs"
                     placeholder="e.g. 921023243001"
                     required
@@ -1216,7 +1233,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Admins can correct typos or update the student's register number.
+                  Must be exactly 12 numbers (no more, no less, letters/symbols blocked).
                 </p>
               </div>
 

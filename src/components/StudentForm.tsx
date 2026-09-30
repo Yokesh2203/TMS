@@ -84,10 +84,10 @@ export const StudentForm: React.FC<StudentFormProps> = ({
     isHostel?: boolean;
   } | null>(null);
 
-  // Real-time live check as the student fills the Register Number input box
+  // Real-time live check as the student fills the Register Number input box (strictly 12 digits)
   useEffect(() => {
     const clean = formData.identifier.trim();
-    if (clean.length < 5) {
+    if (clean.length < 12) {
       setRegCheckStatus('idle');
       setRegCheckInfo(null);
       return;
@@ -109,7 +109,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
           setRegCheckInfo(null);
           setErrors((prev) => {
             const next = { ...prev };
-            if (next.identifier && (next.identifier.includes('already saved') || next.identifier.includes('Already registered') || next.identifier.includes('required'))) {
+            if (next.identifier && (next.identifier.includes('already saved') || next.identifier.includes('Already registered') || next.identifier.includes('required') || next.identifier.includes('12 digits') || next.identifier.includes('12-digit'))) {
               delete next.identifier;
             }
             return next;
@@ -371,8 +371,11 @@ export const StudentForm: React.FC<StudentFormProps> = ({
       newErrors.studentName = 'Student name is required (e.g. DEVMOI).';
     }
 
-    if (!formData.identifier.trim()) {
+    const cleanId = formData.identifier.trim();
+    if (!cleanId) {
       newErrors.identifier = 'Anna University 12-digit Register Number is required.';
+    } else if (cleanId.length !== 12) {
+      newErrors.identifier = `Register Number must be exactly 12 digits (currently ${cleanId.length} digits).`;
     }
 
     if (!formData.departmentOrClass) {
@@ -628,41 +631,49 @@ export const StudentForm: React.FC<StudentFormProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Register Number */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label
-                    htmlFor="register-number-input"
-                    className="block text-xs font-medium text-slate-700"
-                  >
-                    Register Number <span className="text-rose-500">*</span>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="register-number-input" className="block text-xs font-bold text-slate-700">
+                    Anna University Register Number <span className="text-rose-500">*</span>
                   </label>
-                  {regCheckStatus === 'checking' && (
-                    <span className="text-[11px] text-indigo-600 font-medium flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin text-indigo-500" />
-                      <span>Checking...</span>
-                    </span>
-                  )}
-                  {regCheckStatus === 'available' && (
-                    <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
-                      <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                      <span>Available</span>
-                    </span>
-                  )}
-                  {regCheckStatus === 'taken' && (
-                    <span className="text-[11px] text-rose-600 font-bold flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3 text-rose-500" />
-                      <span>Already Registered</span>
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {formData.identifier.length > 0 && formData.identifier.length < 12 && (
+                      <span className="text-[11px] font-mono font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                        {formData.identifier.length}/12 digits
+                      </span>
+                    )}
+                    {formData.identifier.length === 12 && regCheckStatus !== 'taken' && (
+                      <span className="text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                        12/12 digits ✓
+                      </span>
+                    )}
+                    {regCheckStatus === 'checking' && (
+                      <span className="text-[11px] text-indigo-600 font-medium flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin text-indigo-500" />
+                        <span>Checking...</span>
+                      </span>
+                    )}
+                    {regCheckStatus === 'taken' && (
+                      <span className="text-[11px] text-rose-600 font-bold flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3 text-rose-500" />
+                        <span>Already Registered</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="relative">
                   <input
                     type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     id="register-number-input"
                     placeholder="e.g. 921023243001"
-                    maxLength={15}
+                    maxLength={12}
                     value={formData.identifier}
-                    onChange={(e) => handleInputChange('identifier', e.target.value.trim())}
-                    className={`w-full pl-9 pr-9 py-2.5 text-sm bg-white border font-mono rounded-xl focus:outline-none focus:ring-2 transition-all ${
+                    onChange={(e) => {
+                      const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 12);
+                      handleInputChange('identifier', digitsOnly);
+                    }}
+                    className={`w-full pl-9 pr-9 py-2.5 text-sm bg-white border font-mono rounded-xl focus:outline-none focus:ring-2 transition-all tracking-wider ${
                       regCheckStatus === 'taken' || errors.identifier
                         ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-200 text-rose-900 bg-rose-50/20'
                         : regCheckStatus === 'available'
@@ -695,12 +706,12 @@ export const StudentForm: React.FC<StudentFormProps> = ({
                   </div>
                 ) : errors.identifier ? (
                   <p className="mt-1 text-xs text-rose-600 flex items-center gap-1">
-                    <AlertCircle className="h-3.5 w-3.5" />
-                    {errors.identifier}
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span>{errors.identifier}</span>
                   </p>
                 ) : (
                   <p className="mt-1 text-[11px] text-slate-400">
-                    e.g. 921023243001 (AD), 921023105001 (IT)
+                    Must be exactly 12 numbers (e.g. 921023243001)
                   </p>
                 )}
               </div>
