@@ -17,6 +17,7 @@ import {
   fetchStudentsFromDb,
   saveStudentToDb,
   updateStudentInDb,
+  deleteStudentFromDb,
   DbStatus,
   getStoredAdminAuth,
   adminLogout,
@@ -93,6 +94,12 @@ function AppContent() {
       prev.map((s) => (s.id === studentId ? { ...s, ...updatedStudent } : s))
     );
     return updatedStudent;
+  };
+
+  // Handle Delete Student directly from MySQL
+  const handleDeleteStudent = async (studentId: string) => {
+    await deleteStudentFromDb(studentId);
+    setStudents((prev) => prev.filter((s) => s.id !== studentId));
   };
 
   // Admin Login success handler
@@ -220,6 +227,7 @@ function AppContent() {
                       students={students}
                       onRefreshStudents={loadStudents}
                       onUpdateStudent={handleUpdateStudent}
+                      onDeleteStudent={handleDeleteStudent}
                       isRefreshing={isRefreshing}
                     />
                   </main>

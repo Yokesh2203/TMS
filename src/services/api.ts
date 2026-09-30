@@ -171,6 +171,28 @@ export async function updateStudentInDb(
   throw new Error('Could not complete student update.');
 }
 
+// 3.6 Delete student from MySQL Database
+export async function deleteStudentFromDb(
+  id: string | number
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/students/${id}`, {
+      method: 'DELETE',
+    });
+
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      return { success: true, message: result.message || 'Student removed from database' };
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to delete student from database.');
+    }
+  } catch (err: any) {
+    console.error('❌ [TMS API] Failed to delete student from database:', err);
+    throw err;
+  }
+}
+
 // ==========================================
 // 4. Admin Authentication Services (Server-Side Verified)
 // ==========================================

@@ -20,6 +20,7 @@ import {
   Loader2,
   User,
   Hash,
+  Trash2,
 } from 'lucide-react';
 import { Student } from '../types';
 import {
@@ -32,7 +33,7 @@ import {
   detectDepartmentGaps,
   extractRollNumber,
 } from '../utils/gapDetection';
-import { updateStudentInDb } from '../services/api';
+import { updateStudentInDb, deleteStudentFromDb } from '../services/api';
 
 // Persists which DEPARTMENTS have been manually verified by admin
 const VERIFIED_DEPTS_KEY = 'nscet_tms_verified_departments_v2';
@@ -41,6 +42,7 @@ interface AdminPanelProps {
   students: Student[];
   onRefreshStudents?: () => void;
   onUpdateStudent?: (studentId: string, data: Partial<Student>) => Promise<any>;
+  onDeleteStudent?: (studentId: string) => Promise<any>;
   isRefreshing?: boolean;
 }
 
@@ -48,6 +50,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   students,
   onRefreshStudents,
   onUpdateStudent,
+  onDeleteStudent,
   isRefreshing = false,
 }) => {
   // Edit Student Modal state
@@ -72,6 +75,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [editToast, setEditToast] = useState<string | null>(null);
+
+  // Delete Student state
+  const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingStudent) return;
+    setIsDeleting(true);
+    try {
+      if (onDeleteStudent) {
+        await onDeleteStudent(deletingStudent.id);
+      } else {
+        await deleteStudentFromDb(deletingStudent.id);
+        if (onRefreshStudents) {
+          onRefreshStudents();
+        }
+      }
+      setEditToast(`Deleted "${deletingStudent.studentName}" (${deletingStudent.identifier}) successfully!`);
+      setTimeout(() => setEditToast(null), 4000);
+      setDeletingStudent(null);
+      if (editingStudent?.id === deletingStudent.id) {
+        setEditingStudent(null);
+      }
+    } catch (err: any) {
+      console.error('Failed to delete student:', err);
+      alert(err.message || 'Failed to delete student from database.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleOpenEdit = (student: Student) => {
     const isHostel = Boolean(student.isHostel || student.busRouteId === null || (!student.busRouteName && !student.stoppingName));
@@ -1045,7 +1078,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <th className="py-4 px-4 sm:px-5 min-w-[210px]">Bus Route</th>
                 <th className="py-4 px-4 sm:px-5 min-w-[200px]">Boarding Stop</th>
                 <th className="py-4 px-4 sm:px-5 min-w-[120px]">Status</th>
-                <th className="py-4 px-4 sm:px-5 min-w-[100px] text-center">Action</th>
+                <th className="py-4 px-4 sm:px-5 min-w-[140px] text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1172,18 +1205,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       )}
                     </td>
 
-                    {/* Edit Action Button */}
+                    {/* Action Buttons (Edit & Delete) */}
                     <td className="py-3.5 px-4 sm:px-5 whitespace-nowrap text-center">
                       {item.isSubmitted && item.rawStudent ? (
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(item.rawStudent!)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-indigo-200 hover:border-indigo-600 transition-all cursor-pointer shadow-2xs group/btn"
-                          title={`Edit ${item.studentName}'s route and details`}
-                        >
-                          <Pencil className="h-3.5 w-3.5 text-indigo-500 group-hover/btn:text-white transition-colors" />
-                          <span>Edit</span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          {/* Edit Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(item.rawStudent!)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-indigo-200 hover:border-indigo-600 transition-all cursor-pointer shadow-2xs group/btn"
+                            title={`Edit ${item.studentName}'s details`}
+                          >
+                            <Pencil className="h-3.5 w-3.5 text-indigo-500 group-hover/btn:text-white transition-colors" />
+                            <span>Edit</span>
+                          </button>
+
+                          {/* Delete Button */}
+                          <button
+                            type="button"
+                            onClick={() => setDeletingStudent(item.rawStudent!)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 hover:border-rose-600 transition-all cursor-pointer shadow-2xs group/delBtn"
+                            title={`Delete ${item.studentName} from database`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-rose-500 group-hover/delBtn:text-white transition-colors" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
                       ) : (
                         <span className="text-slate-300 text-xs">—</span>
                       )}
@@ -1426,34 +1473,98 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               )}
 
               {/* Modal Footer Buttons */}
-              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between gap-2.5 pt-4 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setEditingStudent(null)}
-                  disabled={isSavingEdit}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  onClick={() => setDeletingStudent(editingStudent)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors cursor-pointer"
+                  title="Delete this student record"
                 >
-                  Cancel
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Delete Student</span>
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSavingEdit}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {isSavingEdit ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      <span>Saving Changes...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="h-3.5 w-3.5 stroke-[2.5]" />
-                      <span>Save Changes</span>
-                    </>
-                  )}
-                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingStudent(null)}
+                    disabled={isSavingEdit}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingEdit}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingEdit ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Saving Changes...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                        <span>Save Changes</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingStudent && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl border border-slate-200 p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="h-12 w-12 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 mx-auto">
+              <Trash2 className="h-6 w-6" />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <h3 className="text-base font-bold text-slate-900">
+                Delete Student Record?
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Are you sure you want to delete <strong className="text-slate-900">{deletingStudent.studentName}</strong> (Reg No: <span className="font-mono font-bold text-slate-800">{deletingStudent.identifier}</span>)?
+              </p>
+              <p className="text-[11px] text-rose-600 font-semibold mt-1">
+                This record will be permanently deleted from the college MySQL database.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingStudent(null)}
+                disabled={isDeleting}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Yes, Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
