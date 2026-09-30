@@ -756,8 +756,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   {/* Stats */}
                   <div className="flex flex-wrap items-center gap-3 text-slate-600 font-mono text-[11px]">
                     <span>Submitted: <strong>{singleDeptGapResult.totalSubmitted}</strong></span>
-                    <span>Min Reg No: <strong>{singleDeptGapResult.minRegisterNumber || '—'}</strong></span>
-                    <span>Max Reg No: <strong>{singleDeptGapResult.maxRegisterNumber || '—'}</strong></span>
+                    {singleDeptGapResult.groups && singleDeptGapResult.groups.length <= 1 ? (
+                      <>
+                        <span>Min Reg No: <strong>{singleDeptGapResult.minRegisterNumber || '—'}</strong></span>
+                        <span>Max Reg No: <strong>{singleDeptGapResult.maxRegisterNumber || '—'}</strong></span>
+                      </>
+                    ) : (
+                      <span>Groups: <strong>{singleDeptGapResult.groups?.length || 1} Ranges</strong></span>
+                    )}
                     <span className={singleDeptGapResult.hasGaps ? 'text-rose-600 font-bold' : 'text-emerald-600 font-bold'}>
                       Missing: {singleDeptGapResult.missingCount}
                     </span>
@@ -787,6 +793,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Continuous Range Groups breakdown (e.g. Regular batch + Lateral entry batch) */}
+              {singleDeptGapResult.groups && singleDeptGapResult.groups.length > 1 && (
+                <div className="p-3 bg-slate-50/80 rounded-2xl border border-slate-200 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">
+                    Continuous Range Groups ({singleDeptGapResult.groups.length}):
+                  </span>
+                  {singleDeptGapResult.groups.map((grp, gIdx) => (
+                    <div
+                      key={gIdx}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs font-mono text-[11px]"
+                    >
+                      <span className="font-bold text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">
+                        Group {gIdx + 1}
+                      </span>
+                      <span className="text-slate-800 font-semibold">
+                        {grp.startFormatted} → {grp.endFormatted}
+                      </span>
+                      <span className="text-slate-400">•</span>
+                      <span className="text-slate-600">
+                        {grp.submittedCount} sub
+                      </span>
+                      {grp.missingCount > 0 ? (
+                        <span className="text-rose-600 font-bold bg-rose-50 px-1.5 py-0.5 rounded text-[10px]">
+                          {grp.missingCount} missing
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">
+                          0 missing ✓
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {singleDeptGapResult.totalSubmitted === 0 && (
                 <div className="py-4 text-center text-slate-400 text-xs">

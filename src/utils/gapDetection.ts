@@ -61,6 +61,17 @@ export function extractRollNumber(rawIdentifier: string): RollNumberInfo | null 
   return null;
 }
 
+export interface RegisterRangeGroup {
+  prefix: string;
+  startVal: number;
+  endVal: number;
+  startFormatted: string;
+  endFormatted: string;
+  submittedCount: number;
+  missingCount: number;
+  missingNumbers: string[];
+}
+
 export interface GapDetectionResult {
   totalSubmitted: number;
   minRegisterNumber: string | null;
@@ -69,20 +80,22 @@ export interface GapDetectionResult {
   missingNumbers: string[];
   sortedSubmitted: string[];
   hasGaps: boolean;
+  groups: RegisterRangeGroup[];
 }
 
 interface ParsedRegisterNumber {
   raw: string;
   prefix: string;
-  numericVal: bigint;
+  numericVal: number;
   padLength: number;
   suffix: string;
 }
 
 /**
- * Detects missing register numbers starting from 001 (roll number 1) up to the maximum submitted register number.
- * College engineering register series always begin at ...001.
- * e.g. If student 921023243026 is submitted, missing are 921023243001 to 921023243025 (25 missing).
+ * Detects missing register numbers based on continuous ranges.
+ * If there is a large gap between register numbers (e.g., regular batch 001–026 and lateral batch 301–305),
+ * it creates separate continuous groups and evaluates missing numbers ONLY within each group's range.
+ * Gaps between batches (e.g., 027–300 or 054–920) are NOT considered missing.
  */
 export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionResult {
   const cleaned = identifiers
@@ -98,10 +111,11 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
       missingNumbers: [],
       sortedSubmitted: [],
       hasGaps: false,
+      groups: [],
     };
   }
 
-  // Parse each identifier into prefix, numeric BigInt value, padding length, suffix
+  // Parse each identifier into prefix, numeric value, padding length, suffix
   const parsedItems: ParsedRegisterNumber[] = [];
 
   for (const raw of cleaned) {
@@ -113,7 +127,7 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
         parsedItems.push({
           raw,
           prefix: seriesPrefix,
-          numericVal: BigInt(rollSeqStr),
+          numericVal: parseInt(rollSeqStr, 10),
           padLength: 3,
           suffix: '',
         });
@@ -132,7 +146,7 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
           parsedItems.push({
             raw,
             prefix: seriesPrefix,
-            numericVal: BigInt(rollSeqStr),
+            numericVal: parseInt(rollSeqStr, 10),
             padLength: 3,
             suffix: '',
           });
@@ -142,7 +156,7 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
         parsedItems.push({
           raw,
           prefix: '',
-          numericVal: BigInt(raw),
+          numericVal: parseInt(raw, 10),
           padLength: raw.length,
           suffix: '',
         });
@@ -159,7 +173,7 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
         parsedItems.push({
           raw,
           prefix: match[1],
-          numericVal: BigInt(match[2]),
+          numericVal: parseInt(match[2], 10),
           padLength: match[2].length,
           suffix: match[3],
         });
@@ -173,7 +187,7 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
     parsedItems.push({
       raw,
       prefix: raw,
-      numericVal: 0n,
+      numericVal: 0,
       padLength: 0,
       suffix: '',
     });
@@ -185,7 +199,7 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
       return a.prefix.localeCompare(b.prefix);
     }
     if (a.numericVal !== b.numericVal) {
-      return a.numericVal < b.numericVal ? -1 : 1;
+      return a.numericVal - b.numericVal;
     }
     return a.suffix.localeCompare(b.suffix);
   });
@@ -203,7 +217,7 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
   const minRegisterNumber = sortedSubmitted[0] || null;
   const maxRegisterNumber = sortedSubmitted[sortedSubmitted.length - 1] || null;
 
-  // Group by prefix and suffix to evaluate each series from 001 up to max submitted
+  // Group by prefix and suffix
   const prefixGroups = new Map<string, ParsedRegisterNumber[]>();
   for (const item of uniqueItems) {
     const groupKey = `${item.prefix}___${item.suffix}`;
@@ -214,34 +228,92 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
   }
 
   const missingNumbers: string[] = [];
+  const groupsSummary: RegisterRangeGroup[] = [];
   const MAX_REPORTABLE_GAPS = 5000;
+  // Threshold to detect a break/jump between continuous series (e.g., 026 to 301 is a jump of 275)
+  const LARGE_GAP_THRESHOLD = 30;
 
   for (const [, items] of prefixGroups.entries()) {
-    items.sort((a, b) => (a.numericVal < b.numericVal ? -1 : 1));
-    const submittedSet = new Set<bigint>(items.map((x) => x.numericVal));
-    const maxVal = items[items.length - 1].numericVal;
-    const minVal = items[0].numericVal;
+    items.sort((a, b) => a.numericVal - b.numericVal);
     const sample = items[0];
 
-    // Determine the base starting number for this college series:
-    // Regular students start at roll number 1 (001).
-    // Lateral entry students typically start at 301.
-    let startVal = 1n;
-    if (minVal >= 301n && minVal <= 399n) {
-      startVal = 301n;
-    } else if (minVal > 1000n) {
-      startVal = minVal;
+    // Partition `items` into continuous clusters based on large gaps or hundred-boundary jumps
+    const clusters: ParsedRegisterNumber[][] = [];
+    let currentCluster: ParsedRegisterNumber[] = [items[0]];
+
+    for (let i = 1; i < items.length; i++) {
+      const prev = items[i - 1];
+      const curr = items[i];
+      const diff = curr.numericVal - prev.numericVal;
+
+      // Check if we crossed a standard college batch boundary or gap > threshold
+      const crossedHundredBoundary =
+        (prev.numericVal < 300 && curr.numericVal >= 300) ||
+        (prev.numericVal < 500 && curr.numericVal >= 500) ||
+        (prev.numericVal < 700 && curr.numericVal >= 700) ||
+        (prev.numericVal < 900 && curr.numericVal >= 900);
+
+      const isLargeGap = diff > LARGE_GAP_THRESHOLD;
+
+      if (crossedHundredBoundary || isLargeGap) {
+        clusters.push(currentCluster);
+        currentCluster = [curr];
+      } else {
+        currentCluster.push(curr);
+      }
+    }
+    if (currentCluster.length > 0) {
+      clusters.push(currentCluster);
     }
 
-    // Check all roll numbers from startVal up to maxVal
-    for (let currentVal = startVal; currentVal <= maxVal; currentVal++) {
-      if (!submittedSet.has(currentVal)) {
-        const formattedNum = currentVal.toString().padStart(sample.padLength, '0');
-        const missingFull = `${sample.prefix}${formattedNum}${sample.suffix}`;
-        missingNumbers.push(missingFull);
+    // Process each continuous cluster independently
+    for (const cluster of clusters) {
+      const clusterSubmittedSet = new Set<number>(cluster.map((x) => x.numericVal));
+      const minClusterVal = cluster[0].numericVal;
+      const maxClusterVal = cluster[cluster.length - 1].numericVal;
 
-        if (missingNumbers.length >= MAX_REPORTABLE_GAPS) break;
+      // Determine base starting roll number for this continuous cluster:
+      let startVal = minClusterVal;
+      if (minClusterVal < 300) {
+        // Regular batch starts at 1 if min <= 60
+        if (minClusterVal <= 60) {
+          startVal = 1;
+        }
+      } else if (minClusterVal >= 301 && minClusterVal <= 330) {
+        // Lateral entry batch starts at 301
+        startVal = 301;
+      } else if (minClusterVal >= 501 && minClusterVal <= 520) {
+        startVal = 501;
+      } else if (minClusterVal >= 701 && minClusterVal <= 720) {
+        startVal = 701;
+      } else if (minClusterVal >= 901 && minClusterVal <= 910) {
+        startVal = 901;
       }
+
+      const clusterMissing: string[] = [];
+      for (let v = startVal; v <= maxClusterVal; v++) {
+        if (!clusterSubmittedSet.has(v)) {
+          const formattedNum = v.toString().padStart(sample.padLength, '0');
+          const missingFull = `${sample.prefix}${formattedNum}${sample.suffix}`;
+          clusterMissing.push(missingFull);
+          missingNumbers.push(missingFull);
+          if (missingNumbers.length >= MAX_REPORTABLE_GAPS) break;
+        }
+      }
+
+      const startFormatted = `${sample.prefix}${startVal.toString().padStart(sample.padLength, '0')}${sample.suffix}`;
+      const endFormatted = `${sample.prefix}${maxClusterVal.toString().padStart(sample.padLength, '0')}${sample.suffix}`;
+
+      groupsSummary.push({
+        prefix: sample.prefix,
+        startVal,
+        endVal: maxClusterVal,
+        startFormatted,
+        endFormatted,
+        submittedCount: cluster.length,
+        missingCount: clusterMissing.length,
+        missingNumbers: clusterMissing,
+      });
     }
   }
 
@@ -253,6 +325,7 @@ export function detectRegisterNumberGaps(identifiers: string[]): GapDetectionRes
     missingNumbers,
     sortedSubmitted,
     hasGaps: missingNumbers.length > 0,
+    groups: groupsSummary,
   };
 }
 
@@ -264,6 +337,7 @@ export interface DepartmentGapReport {
   missingCount: number;
   missingNumbers: string[];
   hasGaps: boolean;
+  groups: RegisterRangeGroup[];
 }
 
 /**
@@ -302,6 +376,7 @@ export function detectDepartmentGaps(
       missingCount: res.missingCount,
       missingNumbers: res.missingNumbers,
       hasGaps: res.hasGaps,
+      groups: res.groups,
     });
     totalMissingCount += res.missingCount;
     allMissingNumbers.push(...res.missingNumbers);
