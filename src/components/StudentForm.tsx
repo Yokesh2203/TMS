@@ -360,6 +360,9 @@ export const StudentForm: React.FC<StudentFormProps> = ({
     }
   };
 
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingStudentRecord, setPendingStudentRecord] = useState<Omit<Student, 'id' | 'createdAt' | 'updatedAt'> | null>(null);
+
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
@@ -401,30 +404,42 @@ export const StudentForm: React.FC<StudentFormProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Step 1: When user clicks Submit, validate and open Confirmation Modal with filled details
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
+    const inst = selectedInstitution;
+    const isHostel = formData.isHostel;
+    const route = !isHostel ? BUS_ROUTES.find((r) => r.id === formData.busRouteId) : null;
+    const fullStudentName = computeFullStudentName(studentInitial, studentNameOnly);
+
+    const studentRecord: Omit<Student, 'id' | 'createdAt' | 'updatedAt'> = {
+      institutionId: inst.id,
+      institutionName: inst.name,
+      institutionType: 'college',
+      studentName: fullStudentName,
+      identifier: formData.identifier.trim(),
+      departmentOrClass: formData.departmentOrClass,
+      yearOrSection: formData.yearOrSection,
+      isHostel: isHostel,
+      busRouteId: isHostel ? null : (route?.id || null),
+      busRouteName: isHostel ? null : (route ? `${route.routeNumber} - ${route.name}` : null),
+      stoppingName: isHostel ? null : formData.stoppingName,
+    };
+
+    setPendingStudentRecord(studentRecord);
+    setShowConfirmModal(true);
+  };
+
+  // Step 2: Final submission to database after user confirms their details
+  const handleFinalSubmit = async () => {
+    if (!pendingStudentRecord) return;
+
     setIsSubmitting(true);
     try {
-      const inst = selectedInstitution;
-      const isHostel = formData.isHostel;
-      const route = !isHostel ? BUS_ROUTES.find((r) => r.id === formData.busRouteId) : null;
-      const fullStudentName = computeFullStudentName(studentInitial, studentNameOnly);
-
-      const studentRecord: Omit<Student, 'id' | 'createdAt' | 'updatedAt'> = {
-        institutionId: inst.id,
-        institutionName: inst.name,
-        institutionType: 'college',
-        studentName: fullStudentName,
-        identifier: formData.identifier.trim(),
-        departmentOrClass: formData.departmentOrClass,
-        yearOrSection: formData.yearOrSection,
-        isHostel: isHostel,
-        busRouteId: isHostel ? null : (route?.id || null),
-        busRouteName: isHostel ? null : (route ? `${route.routeNumber} - ${route.name}` : null),
-        stoppingName: isHostel ? null : formData.stoppingName,
-      };
+      const studentRecord = pendingStudentRecord;
+      const isHostel = studentRecord.isHostel;
 
       const result = await onSaveStudent(studentRecord);
 
@@ -461,6 +476,8 @@ export const StudentForm: React.FC<StudentFormProps> = ({
       setStudentNameOnly('');
       setRegCheckStatus('idle');
       setRegCheckInfo(null);
+      setShowConfirmModal(false);
+      setPendingStudentRecord(null);
     } catch (err: any) {
       console.error('Registration submission error:', err);
       const isDuplicate = 
@@ -483,6 +500,7 @@ export const StudentForm: React.FC<StudentFormProps> = ({
           : err?.message || 'Could not connect to database. Submissions are only accepted when connected to the server.',
         type: 'error',
       });
+      setShowConfirmModal(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -1413,6 +1431,176 @@ export const StudentForm: React.FC<StudentFormProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Review & Confirm Submission Modal */}
+      {showConfirmModal && pendingStudentRecord && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="max-w-lg w-full bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col max-h-[92vh]">
+            {/* Modal Header */}
+            <div className="px-5 sm:px-6 py-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="h-5 w-5 text-indigo-300" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white leading-tight">
+                    Confirm Registration Details
+                  </h3>
+                  <p className="text-[11px] text-slate-300">
+                    Please review your information before saving to the database
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                disabled={isSubmitting}
+                className="h-8 w-8 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Content - Student Details Summary */}
+            <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
+              <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 sm:p-5 space-y-3.5">
+                {/* Student Full Name & Register Number */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Student Name
+                    </span>
+                    <h4 className="text-base font-extrabold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                      <User className="h-4 w-4 text-indigo-600 shrink-0" />
+                      <span>{pendingStudentRecord.studentName}</span>
+                    </h4>
+                  </div>
+
+                  <div className="sm:text-right">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Anna Univ Register No
+                    </span>
+                    <div className="font-mono text-sm font-black text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-2.5 py-1 rounded-lg inline-block mt-0.5 tracking-wider">
+                      {pendingStudentRecord.identifier}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Department & Year */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-3 border-b border-slate-200 text-xs">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Department
+                    </span>
+                    <p className="font-bold text-slate-800 flex items-center gap-1.5 mt-0.5">
+                      <BookOpen className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                      <span>{pendingStudentRecord.departmentOrClass}</span>
+                    </p>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Year of Study
+                    </span>
+                    <p className="font-bold text-slate-800 flex items-center gap-1.5 mt-0.5">
+                      <GraduationCap className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                      <span>{pendingStudentRecord.yearOrSection}</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Residence & Transport Allocation */}
+                <div className="text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Residence / Transport
+                    </span>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                      pendingStudentRecord.isHostel
+                        ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                        : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                    }`}>
+                      {pendingStudentRecord.isHostel ? '🏢 Hostel Resident' : '🚌 Day Scholar (Bus Transit)'}
+                    </span>
+                  </div>
+
+                  {pendingStudentRecord.isHostel ? (
+                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-[11px] leading-relaxed">
+                      Staying in campus hostel. Daily bus transport not required (Route &amp; Stop: NULL).
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-white border border-slate-200/90 rounded-xl space-y-2">
+                      <div className="flex items-start gap-2">
+                        <Bus className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                            Bus Route
+                          </span>
+                          <span className="font-bold text-slate-900 text-xs">
+                            {pendingStudentRecord.busRouteName || '—'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2 pt-2 border-t border-slate-100">
+                        <MapPin className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                            Boarding Stopping Point
+                          </span>
+                          <span className="font-bold text-emerald-800 text-xs">
+                            {pendingStudentRecord.stoppingName || '—'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Verified College Notice */}
+              <div className="bg-indigo-50/70 border border-indigo-200/70 rounded-xl p-3 flex items-center gap-2.5 text-[11px] text-indigo-900">
+                <Building2 className="h-4 w-4 text-indigo-600 shrink-0" />
+                <span>
+                  Institution: <strong>Nadar Saraswathi College of Engineering &amp; Technology (9210)</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                disabled={isSubmitting}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-200/70 transition-colors cursor-pointer"
+              >
+                Edit Details
+              </button>
+
+              <button
+                type="button"
+                onClick={handleFinalSubmit}
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Saving to Database...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>Confirm &amp; Submit</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

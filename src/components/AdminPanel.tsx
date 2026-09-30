@@ -1517,27 +1517,59 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal with Student Details */}
       {deletingStudent && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
           <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl border border-slate-200 p-6 space-y-4 animate-in zoom-in-95 duration-150">
             <div className="h-12 w-12 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 mx-auto">
               <Trash2 className="h-6 w-6" />
             </div>
 
-            <div className="text-center space-y-1.5">
+            <div className="text-center space-y-1">
               <h3 className="text-base font-bold text-slate-900">
-                Delete Student Record?
+                Confirm Student Deletion
               </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Are you sure you want to delete <strong className="text-slate-900">{deletingStudent.studentName}</strong> (Reg No: <span className="font-mono font-bold text-slate-800">{deletingStudent.identifier}</span>)?
-              </p>
-              <p className="text-[11px] text-rose-600 font-semibold mt-1">
-                This record will be permanently deleted from the college MySQL database.
+              <p className="text-xs text-slate-500">
+                Are you sure you want to delete this student record?
               </p>
             </div>
 
-            <div className="flex items-center justify-center gap-3 pt-2">
+            {/* Student Record Details Card */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2.5 text-xs text-left">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                <span className="text-slate-500 font-medium">Student Name:</span>
+                <span className="font-extrabold text-slate-900">{deletingStudent.studentName}</span>
+              </div>
+
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                <span className="text-slate-500 font-medium">Register Number:</span>
+                <span className="font-mono font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                  {deletingStudent.identifier}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                <span className="text-slate-500 font-medium">Department &amp; Year:</span>
+                <span className="font-semibold text-slate-800">
+                  {deletingStudent.departmentOrClass} • {deletingStudent.yearOrSection}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Residence / Route:</span>
+                <span className="font-semibold text-slate-800">
+                  {deletingStudent.isHostel
+                    ? '🏢 Hostel Resident'
+                    : `${deletingStudent.busRouteName || 'Day Scholar'} • ${deletingStudent.stoppingName || '—'}`}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-rose-50 border border-rose-200/80 rounded-xl text-[11px] text-rose-800 font-medium text-center">
+              ⚠️ This will permanently remove the record from the MySQL database and update gap calculations.
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => setDeletingStudent(null)}
@@ -1550,17 +1582,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 type="button"
                 onClick={handleConfirmDelete}
                 disabled={isDeleting}
-                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white shadow-xs transition-all cursor-pointer disabled:opacity-50"
               >
                 {isDeleting ? (
                   <>
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span>Deleting...</span>
+                    <span>Deleting Record...</span>
                   </>
                 ) : (
                   <>
                     <Trash2 className="h-3.5 w-3.5" />
-                    <span>Yes, Delete</span>
+                    <span>Yes, Delete Permanently</span>
                   </>
                 )}
               </button>
