@@ -366,6 +366,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   }, [students, selectedDept, verifiedDeptYears]);
 
+  // Count verified department batches (total across all 7 depts * 4 years = 28)
+  const totalVerifiedBatches = useMemo(() => {
+    let count = 0;
+    ENGINEERING_DEPARTMENTS.forEach((d) => {
+      COLLEGE_YEARS.forEach((yr) => {
+        if (isDeptYearVerified(d.name, yr)) count++;
+      });
+    });
+    return count;
+  }, [verifiedDeptYears]);
+
+  const verifiedInSelectedYear = useMemo(() => {
+    if (selectedYear === 'ALL') return totalVerifiedBatches;
+    return ENGINEERING_DEPARTMENTS.filter((d) => isDeptYearVerified(d.name, selectedYear)).length;
+  }, [selectedYear, totalVerifiedBatches, verifiedDeptYears]);
+
   // Combine submitted students with missing register numbers for a complete S.No / Roll Number roster
   const rosterItems = useMemo(() => {
     const missingList = singleDeptGapResult?.missingNumbers || [];
