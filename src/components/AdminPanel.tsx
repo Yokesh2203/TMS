@@ -539,8 +539,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const getDeptShortCode = (deptName: string): string =>
     ENGINEERING_DEPARTMENTS.find((d) => d.name === deptName)?.code ?? deptName;
 
-  // Count verified (green) departments
-  const verifiedGreenDepts = ENGINEERING_DEPARTMENTS.filter((d) => isDeptGreen(d.name)).length;
+  const isDeptGreen = (deptName: string): boolean => isDeptPillGreen(deptName);
 
   return (
     <div className="space-y-6">
