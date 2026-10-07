@@ -36,10 +36,8 @@ import {
 import { updateStudentInDb, deleteStudentFromDb } from '../services/api';
 
 // Persists which (DEPARTMENT + YEAR) combinations have been manually verified by admin
-const VERIFIED_STORAGE_KEY = 'nscet_tms_verified_dept_year_v3';
-
-// Helper to generate a unique key for Department + Year
-export const getVerificationKey = (deptName: string, year: string): string => `${deptName}___${year}`;
+const VERIFIED_DEPTS_KEY = 'nscet_tms_verified_dept_years_v3';
+const getDeptYearKey = (deptName: string, year: string): string => `${deptName}___${year}`;
 
 interface AdminPanelProps {
   students: Student[];
@@ -217,64 +215,57 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Table roster view: 'all_slots' (shows 1 to Max with missing slots), 'submitted', or 'missing'
   const [tableRosterView, setTableRosterView] = useState<'all_slots' | 'submitted' | 'missing'>('all_slots');
 
-  // Department + Year level verification state (Set of "Department___Year" keys)
+  // Department + Year granular verification state (Set of "${deptName}___${year}" strings verified by admin)
   const [verifiedDeptYears, setVerifiedDeptYears] = useState<Set<string>>(() => {
     try {
-      const saved = localStorage.getItem(VERIFIED_STORAGE_KEY);
+      const saved = localStorage.getItem(VERIFIED_DEPTS_KEY);
       if (saved) {
         const arr = JSON.parse(saved);
         return new Set(Array.isArray(arr) ? arr : []);
       }
     } catch (e) {
-      console.error('Error reading verified department-years from localStorage:', e);
+      console.error('Error reading verified department years from localStorage:', e);
     }
     return new Set<string>();
   });
 
-  // Check if a specific (dept, year) is verified
+  // Check if a specific department + year is verified
   const isDeptYearVerified = (deptName: string, year: string): boolean => {
-    if (year !== 'ALL') {
-      return verifiedDeptYears.has(getVerificationKey(deptName, year));
-    }
-    // When year is 'ALL', return true if all 4 years are verified for this department
-    return COLLEGE_YEARS.every((yr) => verifiedDeptYears.has(getVerificationKey(deptName, yr)));
+    return verifiedDeptYears.has(getDeptYearKey(deptName, year));
   };
 
-  // Count how many years are verified for a given department
-  const getDeptVerifiedYearsCount = (deptName: string): number => {
-    return COLLEGE_YEARS.filter((yr) => verifiedDeptYears.has(getVerificationKey(deptName, yr))).length;
-  };
-
-  // Toggle verification for a specific department and year
-  const toggleVerification = (deptName: string, year: string) => {
+  // Toggle verification for a specific department + year
+  const toggleDeptYearVerification = (deptName: string, year: string) => {
     setVerifiedDeptYears((prev) => {
       const next = new Set(prev);
-      if (year !== 'ALL') {
-        const key = getVerificationKey(deptName, year);
-        if (next.has(key)) {
-          next.delete(key);
-        } else {
-          next.add(key);
-        }
+      const key = getDeptYearKey(deptName, year);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        // If year is ALL, if all are verified -> unverify all; else verify all 4 years
-        const allVerified = COLLEGE_YEARS.every((yr) => next.has(getVerificationKey(deptName, yr)));
-        COLLEGE_YEARS.forEach((yr) => {
-          const key = getVerificationKey(deptName, yr);
-          if (allVerified) {
-            next.delete(key);
-          } else {
-            next.add(key);
-          }
-        });
+        next.add(key);
       }
       try {
-        localStorage.setItem(VERIFIED_STORAGE_KEY, JSON.stringify(Array.from(next)));
+        localStorage.setItem(VERIFIED_DEPTS_KEY, JSON.stringify(Array.from(next)));
       } catch (e) {
         console.error(e);
       }
       return next;
     });
+  };
+
+  // Check if a department pill should show green:
+  // - If a specific year is selected (e.g. '3rd Year'): green ONLY if (deptName, selectedYear) is verified!
+  // - If 'ALL' is selected: green ONLY if all 4 years of that department are verified!
+  const isDeptPillGreen = (deptName: string): boolean => {
+    if (selectedYear !== 'ALL') {
+      return isDeptYearVerified(deptName, selectedYear);
+    }
+    return COLLEGE_YEARS.every((yr) => isDeptYearVerified(deptName, yr));
+  };
+
+  // Get how many years are verified for a given department
+  const getDeptVerifiedYearsCount = (deptName: string): number => {
+    return COLLEGE_YEARS.filter((yr) => isDeptYearVerified(deptName, yr)).length;
   };
 
   // Filter students based on Department, Year, and Search Query
@@ -356,10 +347,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return map;
   }, [departmentGapAnalysis]);
 
-  // Determine whether a department is "green" (only if explicitly verified by admin via button)
-  const isDeptGreen = (deptName: string): boolean => {
-    return verifiedDepts.has(deptName);
-  };
+  // Detailed Year-by-Year breakdown for the selected department
+  const deptYearsOverview = useMemo(() => {
+    return COLLEGE_YEARS.map((yr) => {
+      const yearStudents = students.filter(
+        (s) => s.departmentOrClass === selectedDept && s.yearOrSection === yr
+      );
+      const ids = yearStudents.map((s) => s.identifier);
+      const gapRes = detectRegisterNumberGaps(ids);
+      const verified = isDeptYearVerified(selectedDept, yr);
+      return {
+        year: yr,
+        students: yearStudents,
+        totalSubmitted: yearStudents.length,
+        gapResult: gapRes,
+        isVerified: verified,
+      };
+    });
+  }, [students, selectedDept, verifiedDeptYears]);
 
   // Combine submitted students with missing register numbers for a complete S.No / Roll Number roster
   const rosterItems = useMemo(() => {
@@ -531,46 +536,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     document.body.removeChild(link);
   };
 
-  // Total verified stats for the top banner (per selected year or across all 28 batches)
-  const verifiedStats = useMemo(() => {
-    if (selectedYear !== 'ALL') {
-      const count = ENGINEERING_DEPARTMENTS.filter((d) => isDeptYearVerified(d.name, selectedYear)).length;
-      return {
-        count,
-        total: ENGINEERING_DEPARTMENTS.length,
-        label: `${selectedYear} Verified Departments`,
-        unit: 'Depts',
-        subtitle: count === ENGINEERING_DEPARTMENTS.length
-          ? `🎉 All ${ENGINEERING_DEPARTMENTS.length} departments verified and confirmed for ${selectedYear}!`
-          : `${count} of ${ENGINEERING_DEPARTMENTS.length} departments verified by admin for ${selectedYear}`,
-      };
-    } else {
-      let verifiedBatchesCount = 0;
-      const totalBatches = ENGINEERING_DEPARTMENTS.length * COLLEGE_YEARS.length; // 7 * 4 = 28 batches
-      ENGINEERING_DEPARTMENTS.forEach((d) => {
-        COLLEGE_YEARS.forEach((yr) => {
-          if (verifiedDeptYears.has(getVerificationKey(d.name, yr))) {
-            verifiedBatchesCount++;
-          }
-        });
-      });
-      return {
-        count: verifiedBatchesCount,
-        total: totalBatches,
-        label: 'Verified Department Batches (Dept × Year)',
-        unit: 'Batches',
-        subtitle: verifiedBatchesCount === totalBatches
-          ? `🎉 All ${totalBatches} department-year batches fully verified by admin!`
-          : `${verifiedBatchesCount} of ${totalBatches} total department-year batches verified by admin`,
-      };
-    }
-  }, [selectedYear, isDeptYearVerified, verifiedDeptYears]);
+  const getDeptShortCode = (deptName: string): string =>
+    ENGINEERING_DEPARTMENTS.find((d) => d.name === deptName)?.code ?? deptName;
+
+  // Count verified (green) departments
+  const verifiedGreenDepts = ENGINEERING_DEPARTMENTS.filter((d) => isDeptGreen(d.name)).length;
 
   return (
     <div className="space-y-6">
 
 
-      {/* Verified Departments & Year Batches Stat Banner */}
+      {/* Verified Departments Stat Banner */}
       <div className="bg-white rounded-2xl sm:rounded-3xl p-5 border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3.5">
           <div className="h-11 w-11 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
@@ -579,14 +555,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                {verifiedStats.label}
+                {selectedYear !== 'ALL' ? `${selectedYear} Verified Departments` : 'Total Verified Batches'}
               </span>
               <span className="font-mono text-xs font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                {verifiedStats.count} / {verifiedStats.total} {verifiedStats.unit}
+                {selectedYear !== 'ALL'
+                  ? `${verifiedInSelectedYear} / ${ENGINEERING_DEPARTMENTS.length} Depts`
+                  : `${totalVerifiedBatches} / ${ENGINEERING_DEPARTMENTS.length * COLLEGE_YEARS.length} Dept-Year Batches`}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              {verifiedStats.subtitle}
+              {selectedYear !== 'ALL'
+                ? `${verifiedInSelectedYear} of ${ENGINEERING_DEPARTMENTS.length} departments verified for ${selectedYear}`
+                : `${totalVerifiedBatches} of ${ENGINEERING_DEPARTMENTS.length * COLLEGE_YEARS.length} total department-year batches verified by admin`}
             </p>
           </div>
         </div>
@@ -650,21 +630,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* Engineering Department Pills with Year-Aware Verification */}
+            {/* Engineering Department Pills */}
             {ENGINEERING_DEPARTMENTS.map((dept) => {
               const isSelected = selectedDept === dept.name;
-              const isVerified = isDeptYearVerified(dept.name, selectedYear);
+              const isGreen = isDeptPillGreen(dept.name);
               const verifiedYearsCount = getDeptVerifiedYearsCount(dept.name);
               const gapInfo = deptGapMap[dept.name];
               const hasGaps = gapInfo?.hasGaps ?? false;
 
               let pillClass = 'bg-white text-slate-700 border border-slate-200 hover:border-slate-300 hover:bg-slate-50';
 
-              if (isSelected && isVerified) {
+              if (isSelected && isGreen) {
                 pillClass = 'bg-emerald-600 text-white border-2 border-emerald-700 shadow-sm ring-2 ring-emerald-200 font-bold';
               } else if (isSelected) {
                 pillClass = 'bg-blue-600 text-white border-2 border-blue-700 shadow-sm ring-2 ring-blue-200 font-bold';
-              } else if (isVerified) {
+              } else if (isGreen) {
                 pillClass = 'bg-emerald-50 text-emerald-800 border-2 border-emerald-500 shadow-xs ring-2 ring-emerald-100 font-bold hover:bg-emerald-100';
               } else if (hasGaps) {
                 pillClass = 'bg-rose-50/70 text-rose-800 border border-rose-300 hover:bg-rose-100/70';
@@ -677,22 +657,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   onClick={() => setSelectedDept(dept.name)}
                   className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${pillClass}`}
                   title={
-                    isVerified
-                      ? `${dept.name} (${selectedYear !== 'ALL' ? selectedYear : 'All Years'}) — Verified by admin ✓`
-                      : selectedYear === 'ALL' && verifiedYearsCount > 0
-                        ? `${dept.name} — ${verifiedYearsCount}/${COLLEGE_YEARS.length} years verified`
-                        : hasGaps
-                          ? `${dept.name} — ${gapInfo?.missingCount} missing register numbers in sequence`
-                          : dept.name
+                    selectedYear !== 'ALL'
+                      ? `${dept.name} — ${isGreen ? `Verified for ${selectedYear} ✓` : `Not verified for ${selectedYear}`}`
+                      : `${dept.name} — ${verifiedYearsCount}/4 Years Verified`
                   }
                 >
                   <span>{dept.code}</span>
                   {isSelected ? (
                     <Check className="h-3.5 w-3.5 text-white stroke-[3]" />
-                  ) : isVerified ? (
+                  ) : isGreen ? (
                     <span className="flex items-center justify-center h-4 w-4 rounded-full bg-emerald-600 text-white text-[10px] font-extrabold">✓</span>
                   ) : selectedYear === 'ALL' && verifiedYearsCount > 0 ? (
-                    <span className="text-emerald-700 font-bold text-[10px] px-1.5 bg-emerald-100 rounded-full">{verifiedYearsCount}/4</span>
+                    <span className="text-emerald-700 font-bold text-[10px] px-1.5 py-0.2 bg-emerald-100 rounded-full border border-emerald-200">
+                      {verifiedYearsCount}/4
+                    </span>
                   ) : hasGaps ? (
                     <span className="text-rose-600 font-bold text-[10px] px-1 bg-rose-100 rounded-full">{gapInfo?.missingCount}</span>
                   ) : (
@@ -738,135 +716,107 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-base font-bold text-slate-900">
-                Department Overview &amp; Verification
+                Department &amp; Year Verification
               </h3>
-              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${totalMissingCount > 0
-                  ? 'bg-rose-100 text-rose-700 border border-rose-200'
-                  : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                }`}>
-                {totalMissingCount > 0 ? `${totalMissingCount} Missing in Sequence` : 'All Consecutive'}
+              <span className="font-mono text-xs font-extrabold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-md border border-indigo-200">
+                {selectedDept} ({getDeptShortCode(selectedDept)})
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Review submission progress for <strong>{selectedDept}</strong> {selectedYear !== 'ALL' ? `(${selectedYear})` : ''}. Click <strong>Verify</strong> to confirm and highlight it in green.
+              Verify each year separately for <strong>{selectedDept}</strong>. Clicking <strong>Verify</strong> confirms only that specific year.
             </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">
+              {selectedYear !== 'ALL'
+                ? `Active View: ${selectedYear}`
+                : `Verified: ${getDeptVerifiedYearsCount(selectedDept)} / 4 Years`}
+            </span>
           </div>
         </div>
 
-        {/* Selected Department Info Card with Year-Specific Verification */}
-        {singleDeptGapResult && (() => {
-          const isVerified = isDeptYearVerified(selectedDept, selectedYear);
+        {/* View 1: If a specific Year is selected in dropdown -> Show that single Year card */}
+        {selectedYear !== 'ALL' && (() => {
+          const yearData = deptYearsOverview.find((d) => d.year === selectedYear);
+          if (!yearData) return null;
+
+          const isVerified = yearData.isVerified;
+          const gapResult = yearData.gapResult;
 
           return (
             <div className="space-y-3">
-              {/* Department Info Row */}
-              <div className={`p-4 rounded-2xl border flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 text-xs ${isVerified
-                  ? 'bg-emerald-50/70 border-emerald-300'
-                  : singleDeptGapResult.hasGaps
+              <div className={`p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-3 text-xs ${
+                isVerified
+                  ? 'bg-emerald-50/80 border-emerald-400 ring-2 ring-emerald-200/80 shadow-xs'
+                  : gapResult.hasGaps
                     ? 'bg-rose-50/50 border-rose-200'
                     : 'bg-indigo-50/50 border-indigo-100'
-                }`}>
+              }`}>
                 <div className="flex items-center gap-2 font-semibold text-slate-900">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-sm font-bold">{selectedDept}</span>
-                    <span className="text-slate-400 font-normal">({getDeptShortCode(selectedDept)})</span>
-                    {selectedYear !== 'ALL' && (
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-bold text-[11px] border border-slate-200">
-                        {selectedYear}
-                      </span>
-                    )}
-                    {isVerified && <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-slate-900">{selectedDept}</span>
+                    <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-bold text-[11px]">
+                      {selectedYear}
+                    </span>
+                    {isVerified && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
                   </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
                   {/* Stats */}
                   <div className="flex flex-wrap items-center gap-3 text-slate-600 font-mono text-[11px]">
-                    <span>Submitted: <strong>{singleDeptGapResult.totalSubmitted}</strong></span>
-                    {singleDeptGapResult.groups && singleDeptGapResult.groups.length <= 1 ? (
+                    <span>Submitted: <strong>{yearData.totalSubmitted}</strong></span>
+                    {gapResult.groups && gapResult.groups.length <= 1 ? (
                       <>
-                        <span>Min Reg No: <strong>{singleDeptGapResult.minRegisterNumber || '—'}</strong></span>
-                        <span>Max Reg No: <strong>{singleDeptGapResult.maxRegisterNumber || '—'}</strong></span>
+                        <span>Min Reg No: <strong>{gapResult.minRegisterNumber || '—'}</strong></span>
+                        <span>Max Reg No: <strong>{gapResult.maxRegisterNumber || '—'}</strong></span>
                       </>
                     ) : (
-                      <span>Groups: <strong>{singleDeptGapResult.groups?.length || 1} Ranges</strong></span>
+                      <span>Groups: <strong>{gapResult.groups?.length || 1} Ranges</strong></span>
                     )}
-                    <span className={singleDeptGapResult.hasGaps ? 'text-rose-600 font-bold' : 'text-emerald-600 font-bold'}>
-                      Missing: {singleDeptGapResult.missingCount}
+                    <span className={gapResult.hasGaps ? 'text-rose-600 font-bold' : 'text-emerald-600 font-bold'}>
+                      Missing: {gapResult.missingCount}
                     </span>
                   </div>
 
-                  {/* Year-Specific Verification Controls */}
-                  {selectedYear !== 'ALL' ? (
-                    <button
-                      type="button"
-                      onClick={() => toggleVerification(selectedDept, selectedYear)}
-                      className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${isVerified
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-200'
-                          : 'bg-white hover:bg-emerald-50 text-emerald-700 border-2 border-emerald-500 hover:border-emerald-600 shadow-xs'
-                        }`}
-                      title={isVerified ? `Click to unverify ${selectedDept} for ${selectedYear}` : `Click to verify and highlight ${selectedDept} for ${selectedYear} in green`}
-                    >
-                      {isVerified ? (
-                        <>
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          <span>Verified ({selectedYear}) ✓</span>
-                        </>
-                      ) : (
-                        <>
-                          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                          <span>Verify {selectedYear}</span>
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    /* All Years Mode: Individual Year Chips + Batch Verify */
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-0.5">
-                        Verify Year:
-                      </span>
-                      {COLLEGE_YEARS.map((yr) => {
-                        const isYrVerified = verifiedDeptYears.has(getVerificationKey(selectedDept, yr));
-                        return (
-                          <button
-                            key={yr}
-                            type="button"
-                            onClick={() => toggleVerification(selectedDept, yr)}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${isYrVerified
-                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
-                                : 'bg-white hover:bg-emerald-50 text-slate-700 border border-slate-200 hover:border-emerald-400'
-                              }`}
-                            title={isYrVerified ? `Click to unverify ${selectedDept} for ${yr}` : `Click to verify ${selectedDept} for ${yr}`}
-                          >
-                            {isYrVerified ? <CheckCircle2 className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3 text-slate-400" />}
-                            <span>{yr.replace(' Year', ' Yr')} {isYrVerified ? '✓' : ''}</span>
-                          </button>
-                        );
-                      })}
-                      <button
-                        type="button"
-                        onClick={() => toggleVerification(selectedDept, 'ALL')}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ml-1 ${isVerified
-                            ? 'bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs'
-                            : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300'
-                          }`}
-                        title={isVerified ? 'Unverify all 4 years' : 'Verify all 4 years at once'}
-                      >
-                        <ShieldCheck className="h-3 w-3" />
-                        <span>{isVerified ? 'All 4 Yrs Verified ✓' : 'Verify All 4 Yrs'}</span>
-                      </button>
-                    </div>
-                  )}
+                  {/* Verify / Unverify Button for this specific year */}
+                  <button
+                    type="button"
+                    onClick={() => toggleDeptYearVerification(selectedDept, selectedYear)}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isVerified
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-200'
+                        : 'bg-white hover:bg-emerald-50 text-emerald-700 border-2 border-emerald-500 hover:border-emerald-600 shadow-xs'
+                    }`}
+                    title={
+                      isVerified
+                        ? `Click to unverify ${selectedDept} for ${selectedYear}`
+                        : `Click to verify ${selectedDept} for ${selectedYear}`
+                    }
+                  >
+                    {isVerified ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        <span>Verified ✓ ({selectedYear})</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Verify {selectedYear}</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
 
-              {/* Continuous Range Groups breakdown (e.g. Regular batch + Lateral entry batch) */}
-              {singleDeptGapResult.groups && singleDeptGapResult.groups.length > 1 && (
+              {/* Continuous Range Groups breakdown for selected year */}
+              {gapResult.groups && gapResult.groups.length > 1 && (
                 <div className="p-3 bg-slate-50/80 rounded-2xl border border-slate-200 flex flex-wrap items-center gap-2 text-xs">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">
-                    Continuous Range Groups ({singleDeptGapResult.groups.length}):
+                    Continuous Range Groups ({gapResult.groups.length}):
                   </span>
-                  {singleDeptGapResult.groups.map((grp, gIdx) => (
+                  {gapResult.groups.map((grp, gIdx) => (
                     <div
                       key={gIdx}
                       className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs font-mono text-[11px]"
@@ -878,9 +828,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         {grp.startFormatted} → {grp.endFormatted}
                       </span>
                       <span className="text-slate-400">•</span>
-                      <span className="text-slate-600">
-                        {grp.submittedCount} sub
-                      </span>
+                      <span className="text-slate-600">{grp.submittedCount} sub</span>
                       {grp.missingCount > 0 ? (
                         <span className="text-rose-600 font-bold bg-rose-50 px-1.5 py-0.5 rounded text-[10px]">
                           {grp.missingCount} missing
@@ -895,14 +843,118 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               )}
 
-              {singleDeptGapResult.totalSubmitted === 0 && (
+              {yearData.totalSubmitted === 0 && (
                 <div className="py-4 text-center text-slate-400 text-xs">
-                  No submitted records for this department yet.
+                  No submitted records for {selectedDept} ({selectedYear}) yet.
                 </div>
               )}
             </div>
           );
         })()}
+
+        {/* View 2: When 'All Years' is selected -> Show separate Year Cards for 1st, 2nd, 3rd, 4th Year */}
+        {selectedYear === 'ALL' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {deptYearsOverview.map((item) => {
+              const isVerified = item.isVerified;
+              const gapResult = item.gapResult;
+              const hasStudents = item.totalSubmitted > 0;
+
+              return (
+                <div
+                  key={item.year}
+                  className={`p-4 rounded-2xl border transition-all ${
+                    isVerified
+                      ? 'bg-emerald-50/80 border-emerald-400 ring-2 ring-emerald-200/80 shadow-xs'
+                      : gapResult.hasGaps
+                        ? 'bg-rose-50/40 border-rose-200 shadow-2xs'
+                        : 'bg-slate-50/80 border-slate-200'
+                  }`}
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-bold text-sm ${isVerified ? 'text-emerald-950 font-extrabold' : 'text-slate-900'}`}>
+                        {item.year}
+                      </span>
+                      <span className="text-[11px] text-slate-400 font-normal">
+                        ({getDeptShortCode(selectedDept)})
+                      </span>
+                      {isVerified && <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />}
+                    </div>
+
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        isVerified
+                          ? 'bg-emerald-600 text-white shadow-2xs'
+                          : gapResult.hasGaps
+                            ? 'bg-rose-100 text-rose-700'
+                            : hasStudents
+                              ? 'bg-indigo-100 text-indigo-700'
+                              : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {isVerified
+                        ? '✓ Verified'
+                        : gapResult.hasGaps
+                          ? `${gapResult.missingCount} Missing`
+                          : hasStudents
+                            ? 'All Consecutive'
+                            : 'No Data'}
+                    </span>
+                  </div>
+
+                  {/* Stats Row */}
+                  <div className="text-[11px] text-slate-600 font-mono mb-3 flex flex-wrap items-center justify-between gap-1">
+                    <span>
+                      Submitted: <strong className="text-slate-900">{item.totalSubmitted}</strong>
+                    </span>
+                    {hasStudents && (
+                      <span className={isVerified ? 'text-emerald-700 font-bold' : gapResult.hasGaps ? 'text-rose-600 font-bold' : 'text-slate-500'}>
+                        {gapResult.hasGaps ? `${gapResult.missingCount} Missing` : '0 Gaps ✓'}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Range preview */}
+                  {hasStudents && gapResult.minRegisterNumber && (
+                    <div className="text-[10px] font-mono text-slate-500 mb-3 bg-white/70 p-1.5 rounded-lg border border-slate-200/70 truncate">
+                      {gapResult.minRegisterNumber} → {gapResult.maxRegisterNumber}
+                    </div>
+                  )}
+
+                  {/* Verify Button for this specific year */}
+                  <button
+                    type="button"
+                    onClick={() => toggleDeptYearVerification(selectedDept, item.year)}
+                    className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isVerified
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs ring-1 ring-emerald-300'
+                        : 'bg-white hover:bg-emerald-50 text-emerald-700 border-2 border-emerald-500 hover:border-emerald-600 shadow-2xs'
+                    }`}
+                    title={
+                      isVerified
+                        ? `Click to unverify ${selectedDept} ${item.year}`
+                        : `Click to verify ${selectedDept} ${item.year}`
+                    }
+                  >
+                    {isVerified ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        <span>Verified ✓ ({item.year})</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Verify {item.year}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Student Records Table with S.No Roster View */}
@@ -917,8 +969,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 type="button"
                 onClick={() => setTableRosterView('all_slots')}
                 className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${tableRosterView === 'all_slots'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
                   }`}
               >
                 All Slots ({totalRosterCount})
@@ -927,8 +979,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 type="button"
                 onClick={() => setTableRosterView('submitted')}
                 className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${tableRosterView === 'submitted'
-                    ? 'bg-white text-emerald-800 shadow-xs'
-                    : 'text-slate-600 hover:text-emerald-700'
+                  ? 'bg-white text-emerald-800 shadow-xs'
+                  : 'text-slate-600 hover:text-emerald-700'
                   }`}
               >
                 Submitted ({submittedCount})
@@ -937,8 +989,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 type="button"
                 onClick={() => setTableRosterView('missing')}
                 className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${tableRosterView === 'missing'
-                    ? 'bg-white text-rose-700 shadow-xs'
-                    : 'text-slate-600 hover:text-rose-700'
+                  ? 'bg-white text-rose-700 shadow-xs'
+                  : 'text-slate-600 hover:text-rose-700'
                   }`}
               >
                 Not Submitted ({missingCount})
@@ -1030,8 +1082,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <tr
                     key={item.key}
                     className={`transition-colors group ${item.isSubmitted
-                        ? 'hover:bg-slate-50/80 bg-white'
-                        : 'bg-rose-50/25 hover:bg-rose-50/50'
+                      ? 'hover:bg-slate-50/80 bg-white'
+                      : 'bg-rose-50/25 hover:bg-rose-50/50'
                       }`}
                   >
                     {/* S.No / Roll Number */}
@@ -1045,8 +1097,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <td className="py-3.5 px-4 sm:px-5 font-mono font-bold text-slate-900 whitespace-nowrap text-sm">
                       <div className="flex items-center gap-2">
                         <span className={`px-2.5 py-1 rounded-lg border text-xs font-mono font-bold tracking-wider ${item.isSubmitted
-                            ? 'bg-slate-100 text-slate-900 border-slate-200/80 shadow-2xs'
-                            : 'bg-rose-100/50 text-rose-800 border-rose-200'
+                          ? 'bg-slate-100 text-slate-900 border-slate-200/80 shadow-2xs'
+                          : 'bg-rose-100/50 text-rose-800 border-rose-200'
                           }`}>
                           {item.identifier}
                         </span>
@@ -1228,11 +1280,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <label className="block text-xs font-bold text-slate-700">
                     Register Number (12 Digits Only) <span className="text-rose-500">*</span>
                   </label>
-                  <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                    editFormData.identifier.length === 12
+                  <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${editFormData.identifier.length === 12
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                       : 'bg-amber-50 text-amber-700 border border-amber-200'
-                  }`}>
+                    }`}>
                     {editFormData.identifier.length}/12 digits
                   </span>
                 </div>
@@ -1331,8 +1382,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     type="button"
                     onClick={() => setEditFormData((prev) => ({ ...prev, isHostel: false }))}
                     className={`p-2.5 rounded-xl border flex items-center justify-center gap-2 font-semibold transition-all cursor-pointer ${!editFormData.isHostel
-                        ? 'bg-indigo-50 border-indigo-500 text-indigo-900 ring-2 ring-indigo-100'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      ? 'bg-indigo-50 border-indigo-500 text-indigo-900 ring-2 ring-indigo-100'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                       }`}
                   >
                     <Bus className="h-4 w-4 text-indigo-600" />
@@ -1350,8 +1401,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       }))
                     }
                     className={`p-2.5 rounded-xl border flex items-center justify-center gap-2 font-semibold transition-all cursor-pointer ${editFormData.isHostel
-                        ? 'bg-amber-50 border-amber-500 text-amber-900 ring-2 ring-amber-100'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      ? 'bg-amber-50 border-amber-500 text-amber-900 ring-2 ring-amber-100'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                       }`}
                   >
                     <Home className="h-4 w-4 text-amber-600" />
