@@ -276,12 +276,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
-        const matchesName = (s.studentName || '').toLowerCase().includes(query);
-        const matchesId = (s.identifier || '').toLowerCase().includes(query);
-        const matchesDept = (s.departmentOrClass || '').toLowerCase().includes(query);
-        const matchesRoute = (s.busRouteName || '').toLowerCase().includes(query);
-        const matchesStop = (s.stoppingName || '').toLowerCase().includes(query);
-        if (!matchesName && !matchesId && !matchesDept && !matchesRoute && !matchesStop) return false;
+        const cleanQ = query.startsWith('#') ? query.slice(1).trim() : query;
+        const matchesName = (s.studentName || '').toLowerCase().includes(cleanQ);
+        const matchesId = (s.identifier || '').toLowerCase().includes(cleanQ);
+        const matchesDept = (s.departmentOrClass || '').toLowerCase().includes(cleanQ);
+        const matchesYear = (s.yearOrSection || '').toLowerCase().includes(cleanQ);
+        const matchesRoute = (s.busRouteName || '').toLowerCase().includes(cleanQ);
+        const matchesStop = (s.stoppingName || '').toLowerCase().includes(cleanQ);
+        const rollInfo = extractRollNumber(s.identifier);
+        const matchesSNo = rollInfo ? String(rollInfo.rollNo).includes(cleanQ) : false;
+        const isHostel = Boolean(s.isHostel || s.busRouteId === null || (!s.busRouteName && !s.stoppingName));
+        const matchesHostel = isHostel && 'hostel'.includes(cleanQ);
+        if (!matchesName && !matchesId && !matchesDept && !matchesYear && !matchesRoute && !matchesStop && !matchesSNo && !matchesHostel) return false;
       }
       return true;
     });
@@ -366,22 +372,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   }, [students, selectedDept, verifiedDeptYears]);
 
-  // Count verified department batches (total across all 7 depts * 4 years = 28)
-  const totalVerifiedBatches = useMemo(() => {
-    let count = 0;
-    ENGINEERING_DEPARTMENTS.forEach((d) => {
-      COLLEGE_YEARS.forEach((yr) => {
-        if (isDeptYearVerified(d.name, yr)) count++;
-      });
-    });
-    return count;
-  }, [verifiedDeptYears]);
-
-  const verifiedInSelectedYear = useMemo(() => {
-    if (selectedYear === 'ALL') return totalVerifiedBatches;
-    return ENGINEERING_DEPARTMENTS.filter((d) => isDeptYearVerified(d.name, selectedYear)).length;
-  }, [selectedYear, totalVerifiedBatches, verifiedDeptYears]);
-
   // Combine submitted students with missing register numbers for a complete S.No / Roll Number roster
   const rosterItems = useMemo(() => {
     const missingList = singleDeptGapResult?.missingNumbers || [];
@@ -405,11 +395,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       };
     });
 
-    // If search query is entered, only show matching submitted records
-    if (searchQuery.trim()) {
-      return submittedItems;
-    }
-
     const missingRows = missingList.map((missingId) => {
       const rollInfo = extractRollNumber(missingId);
       return {
@@ -417,7 +402,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         sNo: rollInfo ? rollInfo.rollNo : 0,
         identifier: missingId,
         studentName: 'Not Submitted',
-        departmentOrClass: selectedDept === 'ALL' ? 'Unassigned' : selectedDept,
+        departmentOrClass: selectedDept,
         yearOrSection: selectedYear === 'ALL' ? '-' : selectedYear,
         isHostel: false,
         busRouteId: '-',
@@ -427,7 +412,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       };
     });
 
-    let allCombined = [...submittedItems, ...missingRows];
+    const q = searchQuery.toLowerCase().trim();
+    const cleanQ = q.startsWith('#') ? q.slice(1).trim() : q;
+    const missingRowsFiltered = cleanQ
+      ? missingRows.filter(
+          (m) =>
+            m.identifier.toLowerCase().includes(cleanQ) ||
+            String(m.sNo).includes(cleanQ) ||
+            'not submitted'.includes(cleanQ) ||
+            'missing'.includes(cleanQ)
+        )
+      : missingRows;
+
+    let allCombined = [...submittedItems, ...missingRowsFiltered];
     allCombined.sort((a, b) => {
       if (a.sNo !== b.sNo && a.sNo !== 0 && b.sNo !== 0) {
         return sortOrder === 'asc' ? a.sNo - b.sNo : b.sNo - a.sNo;
@@ -453,6 +450,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
     return singleDeptGapResult?.missingCount || 0;
   }, [selectedDept, departmentGapAnalysis, singleDeptGapResult]);
+
+  const displayMissingCount = useMemo(() => {
+    if (!searchQuery.trim()) return missingCount;
+    const q = searchQuery.toLowerCase().trim();
+    const cleanQ = q.startsWith('#') ? q.slice(1).trim() : q;
+    const missingList = selectedDept === 'ALL'
+      ? departmentGapAnalysis.allMissingNumbers
+      : (singleDeptGapResult?.missingNumbers || []);
+    return missingList.filter((missingId) => {
+      const rollInfo = extractRollNumber(missingId);
+      const sNoStr = rollInfo ? String(rollInfo.rollNo) : '';
+      return (
+        missingId.toLowerCase().includes(cleanQ) ||
+        sNoStr.includes(cleanQ) ||
+        'not submitted'.includes(cleanQ) ||
+        'missing'.includes(cleanQ)
+      );
+    }).length;
+  }, [searchQuery, missingCount, selectedDept, departmentGapAnalysis, singleDeptGapResult]);
+
+  const displayTotalCount = submittedCount + displayMissingCount;
   const totalRosterCount = submittedCount + missingCount;
 
   const handleCopy = (text: string, label: string) => {
@@ -974,9 +992,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {/* Student Records Table with S.No Roster View */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <div className="p-4 sm:px-6 sm:py-4 border-b border-slate-200/80 bg-slate-50/60 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="p-4 sm:px-6 sm:py-4 border-b border-slate-200/80 bg-slate-50/60 flex flex-col xl:flex-row xl:items-center justify-between gap-3.5">
           <div className="flex flex-wrap items-center gap-3">
-            <h3 className="text-sm sm:text-base font-bold text-slate-900">Student Register</h3>
+            <h3 className="text-sm sm:text-base font-bold text-slate-900 whitespace-nowrap">Student Register</h3>
 
             {/* View Filter: All Slots vs Submitted Only vs Not Submitted */}
             <div className="inline-flex items-center bg-slate-200/70 p-0.5 rounded-xl text-xs font-semibold">
@@ -988,7 +1006,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
                   }`}
               >
-                All Slots ({totalRosterCount})
+                All Slots ({displayTotalCount})
               </button>
               <button
                 type="button"
@@ -1008,20 +1026,56 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   : 'text-slate-600 hover:text-rose-700'
                   }`}
               >
-                Not Submitted ({missingCount})
+                Not Submitted ({displayMissingCount})
               </button>
+            </div>
+
+            {/* Direct Table Search Bar */}
+            <div className="relative min-w-[210px] sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search name, reg no, stop, route..."
+                className="w-full pl-8 pr-7 py-1.5 text-xs rounded-xl bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all shadow-2xs font-medium"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer transition-colors"
+                  title="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {missingCount > 0 && (
+            {displayMissingCount > 0 && (
               <button
                 type="button"
                 onClick={() => {
                   const missingList = selectedDept === 'ALL'
                     ? departmentGapAnalysis.allMissingNumbers
                     : (singleDeptGapResult?.missingNumbers || []);
-                  navigator.clipboard.writeText(missingList.join('\n'));
+                  const q = searchQuery.toLowerCase().trim();
+                  const cleanQ = q.startsWith('#') ? q.slice(1).trim() : q;
+                  const listToCopy = cleanQ
+                    ? missingList.filter((missingId) => {
+                        const rollInfo = extractRollNumber(missingId);
+                        const sNoStr = rollInfo ? String(rollInfo.rollNo) : '';
+                        return (
+                          missingId.toLowerCase().includes(cleanQ) ||
+                          sNoStr.includes(cleanQ) ||
+                          'not submitted'.includes(cleanQ) ||
+                          'missing'.includes(cleanQ)
+                        );
+                      })
+                    : missingList;
+                  navigator.clipboard.writeText(listToCopy.join('\n'));
                   setCopiedText('COPY_TABLE_MISSING');
                   setTimeout(() => setCopiedText(null), 2000);
                 }}
@@ -1029,7 +1083,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 title="Copy unsubmitted register numbers"
               >
                 {copiedText === 'COPY_TABLE_MISSING' ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                <span>{copiedText === 'COPY_TABLE_MISSING' ? 'Copied!' : `Copy ${missingCount} Missing IDs`}</span>
+                <span>{copiedText === 'COPY_TABLE_MISSING' ? 'Copied!' : `Copy ${displayMissingCount} Missing IDs`}</span>
               </button>
             )}
 
@@ -1088,8 +1142,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {rosterItems.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-16 text-center text-slate-400">
-                    <p className="text-base font-semibold text-slate-600">No student records found</p>
-                    <p className="text-xs mt-1">Try selecting a different department or clearing search filters</p>
+                    <p className="text-base font-semibold text-slate-600">
+                      {searchQuery.trim() ? `No records found matching "${searchQuery}"` : 'No student records found'}
+                    </p>
+                    <p className="text-xs mt-1 text-slate-400">
+                      {searchQuery.trim()
+                        ? 'Check your spelling or clear search to view all records'
+                        : 'Try selecting a different department or clearing search filters'}
+                    </p>
+                    {searchQuery.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Clear Search
+                      </button>
+                    )}
                   </td>
                 </tr>
               ) : (
