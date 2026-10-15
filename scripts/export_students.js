@@ -93,7 +93,85 @@ async function exportStudents() {
     fs.writeFileSync(csvFilePath, csvHeader + csvRows.join('\n'), 'utf-8');
     console.log(`✅ CSV / Excel file generated: ${csvFilePath}`);
 
-    console.log('\n🎉 Export complete! You can open exported_students.csv in Excel, or import exported_students.sql into phpMyAdmin.');
+    // 3. Generate Department-Wise Grouped Report CSV
+    const deptMap = new Map();
+    rows.forEach((r) => {
+      const dept = r.department_or_class || 'Unassigned';
+      if (!deptMap.has(dept)) {
+        deptMap.set(dept, []);
+      }
+      deptMap.get(dept).push(r);
+    });
+
+    const deptReportLines = [];
+    deptReportLines.push('"NADAR SARASWATHI COLLEGE OF ENGINEERING & TECHNOLOGY (NSCET)"');
+    deptReportLines.push('"DEPARTMENT-WISE REGISTERED STUDENTS REPORT"');
+    deptReportLines.push(`"Generated At: ${new Date().toISOString()}"`);
+    deptReportLines.push(`"Total Registered Students: ${rows.length}"`);
+    deptReportLines.push('');
+
+    // Summary Header
+    deptReportLines.push('"=== DEPARTMENT REGISTRATION SUMMARY ==="');
+    deptReportLines.push('"S.No","Department","1st Year","2nd Year","3rd Year","4th Year","Bus Users","Hostellers","Total Registered"');
+
+    let deptSNo = 1;
+    console.log('\n📊 Department-Wise Registration Breakdown:');
+    console.log('-------------------------------------------------------------------------------------');
+    console.log('Dept'.padEnd(40) + '1st'.padStart(6) + '2nd'.padStart(6) + '3rd'.padStart(6) + '4th'.padStart(6) + 'Total'.padStart(8));
+    console.log('-------------------------------------------------------------------------------------');
+
+    for (const [dept, deptStudents] of deptMap.entries()) {
+      const y1 = deptStudents.filter((s) => s.year_or_section === '1st Year').length;
+      const y2 = deptStudents.filter((s) => s.year_or_section === '2nd Year').length;
+      const y3 = deptStudents.filter((s) => s.year_or_section === '3rd Year').length;
+      const y4 = deptStudents.filter((s) => s.year_or_section === '4th Year').length;
+      const bus = deptStudents.filter((s) => s.bus_route_id && (s.bus_route_name || s.stopping_name)).length;
+      const hostel = deptStudents.length - bus;
+
+      deptReportLines.push(
+        `"${deptSNo++}","${dept}","${y1}","${y2}","${y3}","${y4}","${bus}","${hostel}","${deptStudents.length}"`
+      );
+
+      console.log(
+        dept.padEnd(40) +
+          String(y1).padStart(6) +
+          String(y2).padStart(6) +
+          String(y3).padStart(6) +
+          String(y4).padStart(6) +
+          String(deptStudents.length).padStart(8)
+      );
+    }
+    console.log('-------------------------------------------------------------------------------------');
+    console.log('TOTAL REGISTERED STUDENTS:'.padEnd(64) + String(rows.length).padStart(8));
+    console.log('-------------------------------------------------------------------------------------\n');
+
+    deptReportLines.push('');
+    deptReportLines.push('"=== DETAILED STUDENT ROSTERS (GROUPED BY DEPARTMENT) ==="');
+    deptReportLines.push('"Department","S.No","Register Number","Student Name","Year / Section","Bus Route","Boarding Stop","Registered Date"');
+
+    for (const [dept, deptStudents] of deptMap.entries()) {
+      deptStudents.forEach((s, idx) => {
+        const safe = (v) => `"${(v || '').toString().replace(/"/g, '""')}"`;
+        deptReportLines.push(
+          [
+            safe(dept),
+            idx + 1,
+            safe(s.identifier),
+            safe(s.student_name),
+            safe(s.year_or_section),
+            safe(s.bus_route_name || 'Hostel'),
+            safe(s.stopping_name || 'Hostel'),
+            safe(s.created_at),
+          ].join(',')
+        );
+      });
+    }
+
+    const deptReportPath = path.resolve('department_wise_report.csv');
+    fs.writeFileSync(deptReportPath, '\uFEFF' + deptReportLines.join('\n'), 'utf-8');
+    console.log(`✅ Department-Wise Report generated: ${deptReportPath}`);
+
+    console.log('\n🎉 Export complete! You can open department_wise_report.csv or exported_students.csv in Excel.');
   } catch (err) {
     console.error('❌ Export failed:', err);
   } finally {
