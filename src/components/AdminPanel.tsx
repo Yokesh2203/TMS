@@ -224,6 +224,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [reportActiveDeptTab, setReportActiveDeptTab] = useState<string>('ALL');
   const [reportSearchQuery, setReportSearchQuery] = useState<string>('');
   const [reportYearFilter, setReportYearFilter] = useState<string>('ALL');
+  const [reportViewMode, setReportViewMode] = useState<'roster' | 'table' | 'cards'>('roster');
 
   // Department + Year granular verification state (Set of "${deptName}___${year}" strings verified by admin)
   const [verifiedDeptYears, setVerifiedDeptYears] = useState<Set<string>>(() => {
@@ -562,42 +563,77 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     document.body.removeChild(link);
   };
 
-  // Department-Wise comprehensive report statistics across all engineering departments
-  const departmentWiseStats = useMemo(() => {
-    return ENGINEERING_DEPARTMENTS.map((dept) => {
-      const deptStudents = students.filter((s) => s.departmentOrClass === dept.name);
+  // Department + Year Granular Breakdown across all 7 Engineering Departments & 4 College Years
+  const departmentYearWiseStats = useMemo(() => {
+    const list: {
+      deptCode: string;
+      deptName: string;
+      year: string;
+      students: Student[];
+      totalSubmitted: number;
+      busCount: number;
+      hostelCount: number;
+      gapResult: ReturnType<typeof detectRegisterNumberGaps>;
+      missingCount: number;
+      isVerified: boolean;
+    }[] = [];
 
-      const yearBreakdown: Record<string, number> = {};
+    ENGINEERING_DEPARTMENTS.forEach((dept) => {
       COLLEGE_YEARS.forEach((yr) => {
-        yearBreakdown[yr] = deptStudents.filter((s) => s.yearOrSection === yr).length;
+        const batchStudents = students.filter(
+          (s) => s.departmentOrClass === dept.name && s.yearOrSection === yr
+        );
+        const ids = batchStudents.map((s) => s.identifier);
+        const gapResult = detectRegisterNumberGaps(ids);
+        const busCount = batchStudents.filter(
+          (s) => !s.isHostel && s.busRouteId !== null && (s.busRouteName || s.stoppingName)
+        ).length;
+        const hostelCount = batchStudents.length - busCount;
+        const isVerified = isDeptYearVerified(dept.name, yr);
+
+        list.push({
+          deptCode: dept.code,
+          deptName: dept.name,
+          year: yr,
+          students: batchStudents,
+          totalSubmitted: batchStudents.length,
+          busCount,
+          hostelCount,
+          gapResult,
+          missingCount: gapResult.missingCount,
+          isVerified,
+        });
       });
-
-      const busCount = deptStudents.filter((s) => !s.isHostel && s.busRouteId !== null && (s.busRouteName || s.stoppingName)).length;
-      const hostelCount = deptStudents.length - busCount;
-
-      const ids = deptStudents.map((s) => s.identifier);
-      const gapRes = detectRegisterNumberGaps(ids);
-      const missingCount = gapRes ? gapRes.missingCount : 0;
-
-      const verifiedYearsCount = COLLEGE_YEARS.filter((yr) => isDeptYearVerified(dept.name, yr)).length;
-      const isFullyVerified = verifiedYearsCount === COLLEGE_YEARS.length;
-
-      return {
-        code: dept.code,
-        name: dept.name,
-        totalSubmitted: deptStudents.length,
-        yearBreakdown,
-        busCount,
-        hostelCount,
-        missingCount,
-        verifiedYearsCount,
-        isFullyVerified,
-        students: deptStudents,
-      };
     });
+
+    return list;
   }, [students, verifiedDeptYears]);
 
-  // Grand totals across all departments
+  // Grouped by Department, containing an array of its 4 Year batches
+  const departmentGroupsWithYears = useMemo(() => {
+    return ENGINEERING_DEPARTMENTS.map((dept) => {
+      const yearBatches = departmentYearWiseStats.filter((b) => b.deptName === dept.name);
+      const deptTotalSubmitted = yearBatches.reduce((acc, b) => acc + b.totalSubmitted, 0);
+      const deptBusCount = yearBatches.reduce((acc, b) => acc + b.busCount, 0);
+      const deptHostelCount = yearBatches.reduce((acc, b) => acc + b.hostelCount, 0);
+      const deptMissingCount = yearBatches.reduce((acc, b) => acc + b.missingCount, 0);
+      const verifiedYearsCount = yearBatches.filter((b) => b.isVerified).length;
+
+      return {
+        deptCode: dept.code,
+        deptName: dept.name,
+        totalSubmitted: deptTotalSubmitted,
+        busCount: deptBusCount,
+        hostelCount: deptHostelCount,
+        missingCount: deptMissingCount,
+        verifiedYearsCount,
+        isFullyVerified: verifiedYearsCount === COLLEGE_YEARS.length,
+        yearBatches,
+      };
+    });
+  }, [departmentYearWiseStats]);
+
+  // Grand totals across all departments & years
   const departmentWiseGrandTotals = useMemo(() => {
     let totalSubmitted = 0;
     let totalBus = 0;
@@ -608,14 +644,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       yearTotals[yr] = 0;
     });
 
-    departmentWiseStats.forEach((d) => {
-      totalSubmitted += d.totalSubmitted;
-      totalBus += d.busCount;
-      totalHostel += d.hostelCount;
-      totalMissing += d.missingCount;
-      COLLEGE_YEARS.forEach((yr) => {
-        yearTotals[yr] += d.yearBreakdown[yr] || 0;
-      });
+    departmentYearWiseStats.forEach((batch) => {
+      totalSubmitted += batch.totalSubmitted;
+      totalBus += batch.busCount;
+      totalHostel += batch.hostelCount;
+      totalMissing += batch.missingCount;
+      yearTotals[batch.year] = (yearTotals[batch.year] || 0) + batch.totalSubmitted;
     });
 
     return {
@@ -625,9 +659,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       totalMissing,
       yearTotals,
     };
-  }, [departmentWiseStats]);
+  }, [departmentYearWiseStats]);
 
-  // Export Department-Wise Registered Students CSV (Organized with Summary Table & Department Rosters)
+  // Export Department-Wise and Year-Wise Registered Students CSV
   const handleExportDepartmentWiseCSV = () => {
     if (students.length === 0) return;
 
@@ -636,74 +670,189 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     // 1. Institution and Report Title
     lines.push(`"NADAR SARASWATHI COLLEGE OF ENGINEERING & TECHNOLOGY (NSCET)"`);
-    lines.push(`"TRANSPORT MANAGEMENT SYSTEM - DEPARTMENT-WISE REGISTERED STUDENTS REPORT"`);
+    lines.push(`"TRANSPORT MANAGEMENT SYSTEM - DEPARTMENT & YEAR-WISE REGISTERED STUDENTS REPORT"`);
     lines.push(`"Report Generated At: ${timestamp}"`);
     lines.push(`"Total Registered Students: ${students.length}"`);
     lines.push(``);
 
-    // 2. Department Summary Table
-    lines.push(`"=== DEPARTMENT REGISTRATION SUMMARY ==="`);
+    // 2. Department and Year Registration Summary Table
+    lines.push(`"=== SECTION 1: DEPARTMENT & YEAR-WISE REGISTRATION SUMMARY ==="`);
     lines.push([
       `"S.No"`,
       `"Dept Code"`,
       `"Department Name"`,
-      ...COLLEGE_YEARS.map((yr) => `"${yr}"`),
-      `"Bus Users"`,
-      `"Hostellers"`,
+      `"Year of Study"`,
       `"Total Registered"`,
-      `"Missing IDs"`,
-      `"Verification Status"`,
+      `"Bus Users (Day Scholars)"`,
+      `"Hostellers"`,
+      `"Missing Register Numbers"`,
+      `"Batch Verification Status"`,
     ].join(','));
 
-    departmentWiseStats.forEach((d, idx) => {
+    let sNoCounter = 1;
+    departmentGroupsWithYears.forEach((deptGroup) => {
+      deptGroup.yearBatches.forEach((batch) => {
+        lines.push([
+          `"${sNoCounter++}"`,
+          `"${deptGroup.deptCode}"`,
+          `"${deptGroup.deptName}"`,
+          `"${batch.year}"`,
+          `"${batch.totalSubmitted}"`,
+          `"${batch.busCount}"`,
+          `"${batch.hostelCount}"`,
+          `"${batch.missingCount}"`,
+          `"${batch.isVerified ? 'Verified ✓' : 'Pending'}"`,
+        ].join(','));
+      });
+
+      // Subtotal row for this department
       lines.push([
-        `"${idx + 1}"`,
-        `"${d.code}"`,
-        `"${d.name}"`,
-        ...COLLEGE_YEARS.map((yr) => `"${d.yearBreakdown[yr] || 0}"`),
-        `"${d.busCount}"`,
-        `"${d.hostelCount}"`,
-        `"${d.totalSubmitted}"`,
-        `"${d.missingCount}"`,
-        `"${d.verifiedYearsCount}/${COLLEGE_YEARS.length} Verified"`,
+        `"SUBTOTAL"`,
+        `"${deptGroup.deptCode}"`,
+        `"${deptGroup.deptName} (All 4 Years)"`,
+        `"All Years"`,
+        `"${deptGroup.totalSubmitted}"`,
+        `"${deptGroup.busCount}"`,
+        `"${deptGroup.hostelCount}"`,
+        `"${deptGroup.missingCount}"`,
+        `"${deptGroup.verifiedYearsCount}/${COLLEGE_YEARS.length} Years Verified"`,
       ].join(','));
+
+      lines.push(``);
     });
 
-    // Grand Totals row for Summary
+    // Grand Totals row
     lines.push([
-      `"TOTAL"`,
-      `"-"`,
-      `"All Departments"`,
-      ...COLLEGE_YEARS.map((yr) => `"${departmentWiseGrandTotals.yearTotals[yr]}"`),
+      `"GRAND TOTAL"`,
+      `"ALL"`,
+      `"All Engineering Departments"`,
+      `"All Batches (1st - 4th Yr)"`,
+      `"${departmentWiseGrandTotals.totalSubmitted}"`,
       `"${departmentWiseGrandTotals.totalBus}"`,
       `"${departmentWiseGrandTotals.totalHostel}"`,
-      `"${departmentWiseGrandTotals.totalSubmitted}"`,
       `"${departmentWiseGrandTotals.totalMissing}"`,
-      `"-"`,
+      `"${totalVerifiedBatches}/${ENGINEERING_DEPARTMENTS.length * COLLEGE_YEARS.length} Batches Verified"`,
     ].join(','));
 
     lines.push(``);
     lines.push(``);
 
-    // 3. Detailed Department-Wise Student Roster
-    lines.push(`"=== DETAILED REGISTERED STUDENTS ROSTER (DEPARTMENT-WISE) ==="`);
+    // 3. Detailed Department & Year-Wise Student Rosters
+    lines.push(`"=== SECTION 2: DETAILED REGISTERED STUDENTS ROSTER (ORGANIZED BY DEPARTMENT & YEAR) ==="`);
     lines.push([
       `"Department"`,
-      `"S.No"`,
+      `"Year of Study"`,
+      `"Roll No / S.No"`,
       `"Register Number"`,
       `"Student Name"`,
-      `"Year / Section"`,
-      `"Residence / Transport"`,
+      `"Residence Type"`,
       `"Bus Route"`,
       `"Boarding Stop"`,
       `"Status"`,
     ].join(','));
 
-    departmentWiseStats.forEach((dept) => {
-      if (dept.students.length === 0) {
-        lines.push(`"${dept.name} (${dept.code})","No registered students","","","","","","",""`);
-      } else {
-        const sortedDeptStudents = [...dept.students].sort((a, b) => {
+    departmentGroupsWithYears.forEach((deptGroup) => {
+      deptGroup.yearBatches.forEach((batch) => {
+        if (batch.students.length > 0) {
+          lines.push(`"--- ${deptGroup.deptName} (${deptGroup.deptCode}) - ${batch.year} (${batch.students.length} Students) ---","","","","","","","",""`);
+
+          const sortedStudents = [...batch.students].sort((a, b) => {
+            const aRoll = extractRollNumber(a.identifier);
+            const bRoll = extractRollNumber(b.identifier);
+            if (aRoll && bRoll && aRoll.rollNo !== bRoll.rollNo) {
+              return aRoll.rollNo - bRoll.rollNo;
+            }
+            return a.identifier.localeCompare(b.identifier, undefined, { numeric: true });
+          });
+
+          sortedStudents.forEach((s, idx) => {
+            const isHostel = Boolean(s.isHostel || s.busRouteId === null || (!s.busRouteName && !s.stoppingName));
+            const roll = extractRollNumber(s.identifier);
+            const sNo = roll ? roll.rollNo : idx + 1;
+            lines.push([
+              `"${deptGroup.deptName} (${deptGroup.deptCode})"`,
+              `"${batch.year}"`,
+              `"${sNo}"`,
+              `"${s.identifier}"`,
+              `"${s.studentName}"`,
+              `"${isHostel ? 'Hostel' : 'Day Scholar (Bus)'}"`,
+              `"${isHostel ? '-' : (s.busRouteName || '-')}"`,
+              `"${isHostel ? '-' : (s.stoppingName || '-')}"`,
+              `"Submitted"`,
+            ].join(','));
+          });
+
+          lines.push(``);
+        }
+      });
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(lines.join('\n'));
+    const link = document.createElement('a');
+    link.setAttribute('href', csvContent);
+    link.setAttribute('download', `nscet_department_year_wise_report_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Grouped by Department and Year for the Report Modal
+  const reportGroupedByDeptAndYear = useMemo(() => {
+    const result: {
+      deptCode: string;
+      deptName: string;
+      years: {
+        year: string;
+        students: Student[];
+        totalSubmitted: number;
+        busCount: number;
+        hostelCount: number;
+        missingCount: number;
+        isVerified: boolean;
+      }[];
+      totalDeptStudents: number;
+    }[] = [];
+
+    const deptsToInclude = reportActiveDeptTab === 'ALL'
+      ? ENGINEERING_DEPARTMENTS
+      : ENGINEERING_DEPARTMENTS.filter((d) => d.name === reportActiveDeptTab);
+
+    deptsToInclude.forEach((dept) => {
+      const yearsList: {
+        year: string;
+        students: Student[];
+        totalSubmitted: number;
+        busCount: number;
+        hostelCount: number;
+        missingCount: number;
+        isVerified: boolean;
+      }[] = [];
+
+      const yearsToInclude = reportYearFilter === 'ALL'
+        ? COLLEGE_YEARS
+        : COLLEGE_YEARS.filter((yr) => yr === reportYearFilter);
+
+      let deptTotalCount = 0;
+
+      yearsToInclude.forEach((yr) => {
+        const batch = departmentYearWiseStats.find(
+          (b) => b.deptName === dept.name && b.year === yr
+        );
+
+        let batchStudents = (batch?.students || []).filter((s) => {
+          if (!reportSearchQuery.trim()) return true;
+          const q = reportSearchQuery.toLowerCase().trim();
+          const cleanQ = q.startsWith('#') ? q.slice(1).trim() : q;
+          const matchesName = (s.studentName || '').toLowerCase().includes(cleanQ);
+          const matchesId = (s.identifier || '').toLowerCase().includes(cleanQ);
+          const matchesRoute = (s.busRouteName || '').toLowerCase().includes(cleanQ);
+          const matchesStop = (s.stoppingName || '').toLowerCase().includes(cleanQ);
+          const rollInfo = extractRollNumber(s.identifier);
+          const matchesSNo = rollInfo ? String(rollInfo.rollNo).includes(cleanQ) : false;
+          return matchesName || matchesId || matchesRoute || matchesStop || matchesSNo;
+        });
+
+        batchStudents.sort((a, b) => {
           const aRoll = extractRollNumber(a.identifier);
           const bRoll = extractRollNumber(b.identifier);
           if (aRoll && bRoll && aRoll.rollNo !== bRoll.rollNo) {
@@ -712,82 +861,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           return a.identifier.localeCompare(b.identifier, undefined, { numeric: true });
         });
 
-        sortedDeptStudents.forEach((s, idx) => {
-          const isHostel = Boolean(s.isHostel || s.busRouteId === null || (!s.busRouteName && !s.stoppingName));
-          const roll = extractRollNumber(s.identifier);
-          const sNo = roll ? roll.rollNo : idx + 1;
-          lines.push([
-            `"${dept.name} (${dept.code})"`,
-            `"${sNo}"`,
-            `"${s.identifier}"`,
-            `"${s.studentName}"`,
-            `"${s.yearOrSection}"`,
-            `"${isHostel ? 'Hostel' : 'Day Scholar (Bus)'}"`,
-            `"${isHostel ? '-' : (s.busRouteName || '-')}"`,
-            `"${isHostel ? '-' : (s.stoppingName || '-')}"`,
-            `"Submitted"`,
-          ].join(','));
+        deptTotalCount += batchStudents.length;
+
+        if (batchStudents.length > 0 || (reportActiveDeptTab !== 'ALL' && reportYearFilter !== 'ALL')) {
+          yearsList.push({
+            year: yr,
+            students: batchStudents,
+            totalSubmitted: batchStudents.length,
+            busCount: batch?.busCount || 0,
+            hostelCount: batch?.hostelCount || 0,
+            missingCount: batch?.missingCount || 0,
+            isVerified: Boolean(batch?.isVerified),
+          });
+        }
+      });
+
+      if (yearsList.length > 0 || reportActiveDeptTab !== 'ALL') {
+        result.push({
+          deptCode: dept.code,
+          deptName: dept.name,
+          years: yearsList,
+          totalDeptStudents: deptTotalCount,
         });
       }
     });
 
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(lines.join('\n'));
-    const link = document.createElement('a');
-    link.setAttribute('href', csvContent);
-    link.setAttribute('download', `nscet_department_wise_report_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // Filtered students for Department-Wise Report modal view
-  const reportFilteredStudents = useMemo(() => {
-    return students.filter((s) => {
-      if (reportActiveDeptTab !== 'ALL' && s.departmentOrClass !== reportActiveDeptTab) {
-        return false;
-      }
-      if (reportYearFilter !== 'ALL' && s.yearOrSection !== reportYearFilter) {
-        return false;
-      }
-      if (reportSearchQuery.trim()) {
-        const q = reportSearchQuery.toLowerCase().trim();
-        const matchesName = (s.studentName || '').toLowerCase().includes(q);
-        const matchesId = (s.identifier || '').toLowerCase().includes(q);
-        const matchesDept = (s.departmentOrClass || '').toLowerCase().includes(q);
-        const matchesRoute = (s.busRouteName || '').toLowerCase().includes(q);
-        const matchesStop = (s.stoppingName || '').toLowerCase().includes(q);
-        if (!matchesName && !matchesId && !matchesDept && !matchesRoute && !matchesStop) {
-          return false;
-        }
-      }
-      return true;
-    });
-  }, [students, reportActiveDeptTab, reportYearFilter, reportSearchQuery]);
-
-  // Group filtered students by department for the report roster
-  const reportGroupedByDept = useMemo(() => {
-    const groups: { dept: typeof ENGINEERING_DEPARTMENTS[0]; students: Student[] }[] = [];
-    const deptsToInclude = reportActiveDeptTab === 'ALL'
-      ? ENGINEERING_DEPARTMENTS
-      : ENGINEERING_DEPARTMENTS.filter((d) => d.name === reportActiveDeptTab);
-
-    deptsToInclude.forEach((dept) => {
-      const deptList = reportFilteredStudents.filter((s) => s.departmentOrClass === dept.name);
-      deptList.sort((a, b) => {
-        const aRoll = extractRollNumber(a.identifier);
-        const bRoll = extractRollNumber(b.identifier);
-        if (aRoll && bRoll && aRoll.rollNo !== bRoll.rollNo) {
-          return aRoll.rollNo - bRoll.rollNo;
-        }
-        return a.identifier.localeCompare(b.identifier, undefined, { numeric: true });
-      });
-      if (deptList.length > 0 || reportActiveDeptTab !== 'ALL') {
-        groups.push({ dept, students: deptList });
-      }
-    });
-
-    return groups;
-  }, [reportFilteredStudents, reportActiveDeptTab]);
+    return result;
+  }, [departmentYearWiseStats, reportActiveDeptTab, reportYearFilter, reportSearchQuery]);
 
   const getDeptShortCode = (deptName: string): string =>
     ENGINEERING_DEPARTMENTS.find((d) => d.name === deptName)?.code ?? deptName;
@@ -823,16 +923,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </div>
 
-        {/* Action Button: Department-Wise Report */}
+        {/* Action Button: Department & Year-Wise Report */}
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setShowDeptReportModal(true)}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-xs hover:shadow transition-all cursor-pointer"
-            title="Open comprehensive department-wise registered students report & print view"
+            title="Open comprehensive department and year-wise registered students report & print view"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            <span>Department-Wise Report</span>
+            <span>Dept &amp; Year Report</span>
           </button>
         </div>
       </div>
@@ -1300,10 +1400,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               type="button"
               onClick={() => setShowDeptReportModal(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-xs transition-all cursor-pointer"
-              title="View full department-wise registration report & print"
+              title="View full department & year-wise registration report & print"
             >
               <FileSpreadsheet className="h-3.5 w-3.5 text-indigo-600" />
-              <span>Dept Report</span>
+              <span>Dept &amp; Year Report</span>
             </button>
 
             <button
@@ -1311,10 +1411,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               onClick={handleExportDepartmentWiseCSV}
               disabled={students.length === 0}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-700 hover:bg-emerald-600 text-white shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Download all departments registered students in Excel / CSV"
+              title="Download all departments and year batches registered students in Excel / CSV"
             >
               <Download className="h-3.5 w-3.5" />
-              <span>Export Dept-Wise (CSV)</span>
+              <span>Export Dept &amp; Year (CSV)</span>
             </button>
 
             <button
@@ -1923,7 +2023,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                      Department-Wise Registration Report
+                      Department &amp; Year-Wise Registration Report
                     </h2>
                     <span className="text-[11px] font-mono font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2 py-0.5 rounded-full">
                       NSCET TMS
@@ -2013,338 +2113,534 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
 
-              {/* Section 1: Department Registration Summary Table */}
-              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs print-break-inside-avoid">
-                <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4 text-indigo-600" />
-                    <h3 className="font-bold text-slate-900 text-xs sm:text-sm">
-                      Department Registration Summary Table
-                    </h3>
+              {/* View Mode Switcher & Filter Toolbar */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3.5 print:hidden no-print">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/80">
+                  {/* View Mode Tabs */}
+                  <div className="inline-flex items-center bg-slate-200/80 p-0.5 rounded-xl text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setReportViewMode('roster')}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                        reportViewMode === 'roster'
+                          ? 'bg-white text-indigo-900 shadow-xs font-bold'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <User className="h-3.5 w-3.5" />
+                      <span>Student Rosters by Dept &amp; Year</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setReportViewMode('table')}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                        reportViewMode === 'table'
+                          ? 'bg-white text-indigo-900 shadow-xs font-bold'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <BarChart3 className="h-3.5 w-3.5" />
+                      <span>Dept &amp; Year Summary Table</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setReportViewMode('cards')}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                        reportViewMode === 'cards'
+                          ? 'bg-white text-indigo-900 shadow-xs font-bold'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Layers className="h-3.5 w-3.5" />
+                      <span>Year-Wise Batch Cards</span>
+                    </button>
                   </div>
-                  <span className="text-[11px] text-slate-500 font-mono">
-                    {ENGINEERING_DEPARTMENTS.length} Engineering Departments
-                  </span>
+
+                  {/* Search inside report */}
+                  <div className="relative min-w-[220px]">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={reportSearchQuery}
+                      onChange={(e) => setReportSearchQuery(e.target.value)}
+                      placeholder="Search student, reg no, stop..."
+                      className="w-full pl-8 pr-6 py-1.5 text-xs rounded-xl bg-white border border-slate-200 focus:border-indigo-500 outline-none"
+                    />
+                    {reportSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setReportSearchQuery('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                      >✕</button>
+                    )}
+                  </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
-                        <th className="py-3 px-3.5 w-12 text-center">S.No</th>
-                        <th className="py-3 px-3.5 min-w-[70px]">Code</th>
-                        <th className="py-3 px-3.5 min-w-[220px]">Department Name</th>
-                        <th className="py-3 px-2 text-center min-w-[55px]">1st Yr</th>
-                        <th className="py-3 px-2 text-center min-w-[55px]">2nd Yr</th>
-                        <th className="py-3 px-2 text-center min-w-[55px]">3rd Yr</th>
-                        <th className="py-3 px-2 text-center min-w-[55px]">4th Yr</th>
-                        <th className="py-3 px-3 text-center min-w-[75px]">Bus</th>
-                        <th className="py-3 px-3 text-center min-w-[75px]">Hostel</th>
-                        <th className="py-3 px-3.5 text-center min-w-[95px] bg-indigo-50/60 text-indigo-950 font-black">
-                          Total Reg
-                        </th>
-                        <th className="py-3 px-3 text-center min-w-[80px]">Missing</th>
-                        <th className="py-3 px-3.5 text-center min-w-[110px]">Status</th>
-                        <th className="py-3 px-3.5 text-center print:hidden no-print">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-medium">
-                      {departmentWiseStats.map((dept, idx) => (
-                        <tr
-                          key={dept.code}
-                          className="hover:bg-indigo-50/30 transition-colors"
+                {/* Filter Row: Department Pills & Year Selector */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  {/* Department Pills */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setReportActiveDeptTab('ALL')}
+                      className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                        reportActiveDeptTab === 'ALL'
+                          ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                          : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      All Depts ({students.length})
+                    </button>
+                    {ENGINEERING_DEPARTMENTS.map((d) => {
+                      const count = students.filter((s) => s.departmentOrClass === d.name).length;
+                      return (
+                        <button
+                          key={d.code}
+                          type="button"
+                          onClick={() => setReportActiveDeptTab(d.name)}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                            reportActiveDeptTab === d.name
+                              ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                              : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                          }`}
                         >
-                          <td className="py-2.5 px-3.5 text-center font-mono text-slate-400 font-semibold">
-                            {idx + 1}
-                          </td>
-                          <td className="py-2.5 px-3.5 font-mono font-bold text-slate-900">
-                            <span className="bg-slate-100 px-2 py-0.5 rounded text-indigo-900 font-extrabold border border-slate-200/80">
-                              {dept.code}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3.5 font-semibold text-slate-900">
-                            {dept.name}
-                          </td>
-                          <td className="py-2.5 px-2 text-center font-mono text-slate-700">
-                            {dept.yearBreakdown['1st Year'] || 0}
-                          </td>
-                          <td className="py-2.5 px-2 text-center font-mono text-slate-700">
-                            {dept.yearBreakdown['2nd Year'] || 0}
-                          </td>
-                          <td className="py-2.5 px-2 text-center font-mono text-slate-700">
-                            {dept.yearBreakdown['3rd Year'] || 0}
-                          </td>
-                          <td className="py-2.5 px-2 text-center font-mono text-slate-700">
-                            {dept.yearBreakdown['4th Year'] || 0}
-                          </td>
-                          <td className="py-2.5 px-3 text-center font-mono text-blue-700 font-semibold">
-                            {dept.busCount}
-                          </td>
-                          <td className="py-2.5 px-3 text-center font-mono text-amber-700 font-semibold">
-                            {dept.hostelCount}
-                          </td>
-                          <td className="py-2.5 px-3.5 text-center font-mono font-black text-indigo-900 bg-indigo-50/40 text-sm">
-                            {dept.totalSubmitted}
-                          </td>
-                          <td className="py-2.5 px-3 text-center font-mono">
-                            {dept.missingCount > 0 ? (
-                              <span className="text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                                {dept.missingCount}
-                              </span>
-                            ) : (
-                              <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                                0
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3.5 text-center">
-                            {dept.isFullyVerified ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                                4/4 Verified
-                              </span>
-                            ) : dept.verifiedYearsCount > 0 ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                {dept.verifiedYearsCount}/4 Verified
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                                Pending
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3.5 text-center print:hidden no-print">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setReportActiveDeptTab(dept.name);
-                              }}
-                              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-indigo-700 hover:text-white bg-indigo-50 hover:bg-indigo-600 transition-colors cursor-pointer border border-indigo-200"
-                            >
-                              View Roster
-                            </button>
-                          </td>
-                        </tr>
+                          <span>{d.code}</span>
+                          <span className={`text-[10px] font-bold px-1 rounded-full ${
+                            reportActiveDeptTab === d.name ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Year of Study Filter */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Year Filter:</span>
+                    <div className="inline-flex items-center bg-slate-200/70 p-0.5 rounded-xl text-xs font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setReportYearFilter('ALL')}
+                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                          reportYearFilter === 'ALL'
+                            ? 'bg-white text-indigo-900 shadow-xs font-bold'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        All Years
+                      </button>
+                      {COLLEGE_YEARS.map((yr) => (
+                        <button
+                          key={yr}
+                          type="button"
+                          onClick={() => setReportYearFilter(yr)}
+                          className={`px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                            reportYearFilter === yr
+                              ? 'bg-white text-indigo-900 shadow-xs font-bold'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {yr}
+                        </button>
                       ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-slate-900 text-white font-bold text-xs">
-                        <td colSpan={3} className="py-3 px-3.5 text-right uppercase tracking-wider font-extrabold text-[11px]">
-                          Grand Totals (All Departments):
-                        </td>
-                        <td className="py-3 px-2 text-center font-mono">
-                          {departmentWiseGrandTotals.yearTotals['1st Year']}
-                        </td>
-                        <td className="py-3 px-2 text-center font-mono">
-                          {departmentWiseGrandTotals.yearTotals['2nd Year']}
-                        </td>
-                        <td className="py-3 px-2 text-center font-mono">
-                          {departmentWiseGrandTotals.yearTotals['3rd Year']}
-                        </td>
-                        <td className="py-3 px-2 text-center font-mono">
-                          {departmentWiseGrandTotals.yearTotals['4th Year']}
-                        </td>
-                        <td className="py-3 px-3 text-center font-mono text-blue-200">
-                          {departmentWiseGrandTotals.totalBus}
-                        </td>
-                        <td className="py-3 px-3 text-center font-mono text-amber-200">
-                          {departmentWiseGrandTotals.totalHostel}
-                        </td>
-                        <td className="py-3 px-3.5 text-center font-mono font-black text-amber-300 text-sm">
-                          {departmentWiseGrandTotals.totalSubmitted}
-                        </td>
-                        <td className="py-3 px-3 text-center font-mono text-rose-300">
-                          {departmentWiseGrandTotals.totalMissing}
-                        </td>
-                        <td className="py-3 px-3.5 text-center font-mono text-emerald-300">
-                          {totalVerifiedBatches} Batches
-                        </td>
-                        <td className="print:hidden no-print"></td>
-                      </tr>
-                    </tfoot>
-                  </table>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Section 2: Detailed Registered Student Roster */}
-              <div className="space-y-4 pt-2">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                      <span>Detailed Student Roster</span>
-                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                        {reportFilteredStudents.length} Students Matching Filter
-                      </span>
-                    </h3>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Grouped by department and sorted by roll sequence / register number
-                    </p>
-                  </div>
-
-                  {/* Filter Bar */}
-                  <div className="flex flex-wrap items-center gap-2 print:hidden no-print">
-                    {/* Search inside report */}
-                    <div className="relative min-w-[200px]">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                      <input
-                        type="text"
-                        value={reportSearchQuery}
-                        onChange={(e) => setReportSearchQuery(e.target.value)}
-                        placeholder="Search name, reg no, stop..."
-                        className="w-full pl-8 pr-6 py-1.5 text-xs rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-500 outline-none"
-                      />
-                      {reportSearchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => setReportSearchQuery('')}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
-                        >✕</button>
-                      )}
-                    </div>
-
-                    {/* Year Filter inside report */}
-                    <select
-                      value={reportYearFilter}
-                      onChange={(e) => setReportYearFilter(e.target.value)}
-                      className="py-1.5 px-2.5 text-xs rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-semibold focus:bg-white outline-none cursor-pointer"
-                    >
-                      <option value="ALL">All Years</option>
-                      {COLLEGE_YEARS.map((yr) => (
-                        <option key={yr} value={yr}>{yr}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Department Selection Pills for Roster */}
-                <div className="flex flex-wrap items-center gap-1.5 print:hidden no-print">
-                  <button
-                    type="button"
-                    onClick={() => setReportActiveDeptTab('ALL')}
-                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                      reportActiveDeptTab === 'ALL'
-                        ? 'bg-indigo-600 text-white shadow-xs font-bold'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    All Departments ({students.length})
-                  </button>
-                  {ENGINEERING_DEPARTMENTS.map((d) => {
-                    const count = students.filter((s) => s.departmentOrClass === d.name).length;
-                    return (
-                      <button
-                        key={d.code}
-                        type="button"
-                        onClick={() => setReportActiveDeptTab(d.name)}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                          reportActiveDeptTab === d.name
-                            ? 'bg-indigo-600 text-white shadow-xs font-bold'
-                            : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span>{d.code}</span>
-                        <span className={`text-[10px] font-bold px-1 rounded-full ${
-                          reportActiveDeptTab === d.name ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Grouped Department Tables */}
-                <div className="space-y-5">
-                  {reportGroupedByDept.length === 0 ? (
+              {/* VIEW MODE 1: Student Rosters Organised strictly by Department AND Year */}
+              {reportViewMode === 'roster' && (
+                <div className="space-y-6">
+                  {reportGroupedByDeptAndYear.length === 0 ? (
                     <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
-                      <p className="text-sm font-semibold text-slate-600">No students found matching current filter</p>
-                      <p className="text-xs mt-1">Try clearing the search query or year filter</p>
+                      <p className="text-sm font-semibold text-slate-600">No students found matching current filters</p>
+                      <p className="text-xs mt-1">Try resetting the department or year filters</p>
                     </div>
                   ) : (
-                    reportGroupedByDept.map((group) => (
+                    reportGroupedByDeptAndYear.map((deptGroup) => (
                       <div
-                        key={group.dept.code}
-                        className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs print-break-inside-avoid"
+                        key={deptGroup.deptCode}
+                        className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs space-y-4 p-5 print-break-inside-avoid"
                       >
-                        {/* Department Group Header */}
-                        <div className="px-5 py-3 bg-gradient-to-r from-slate-100 to-indigo-50/50 border-b border-slate-200 flex items-center justify-between">
+                        {/* Department Main Header */}
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                           <div className="flex items-center gap-2.5">
-                            <span className="font-mono text-xs font-black px-2 py-0.5 rounded-lg bg-indigo-600 text-white shadow-2xs">
-                              {group.dept.code}
+                            <span className="font-mono text-xs font-black px-2.5 py-1 rounded-xl bg-indigo-900 text-white shadow-2xs">
+                              {deptGroup.deptCode}
                             </span>
-                            <span className="font-bold text-slate-900 text-xs sm:text-sm">
-                              {group.dept.name}
-                            </span>
+                            <div>
+                              <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                                {deptGroup.deptName}
+                              </h3>
+                              <p className="text-[11px] text-slate-400">
+                                Engineering Department • Year-Wise Student Registration
+                              </p>
+                            </div>
                           </div>
-                          <span className="text-[11px] font-mono font-bold text-indigo-700 bg-indigo-100/70 px-2.5 py-0.5 rounded-full border border-indigo-200">
-                            {group.students.length} Registered
+                          <span className="text-xs font-mono font-bold text-indigo-900 bg-indigo-50 px-3 py-1 rounded-xl border border-indigo-200">
+                            Total {deptGroup.totalDeptStudents} Registered
                           </span>
                         </div>
 
-                        {group.students.length === 0 ? (
-                          <div className="py-6 text-center text-slate-400 text-xs">
-                            No registered students found for this department with the selected filter.
-                          </div>
-                        ) : (
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse text-xs">
-                              <thead>
-                                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                                  <th className="py-2.5 px-3 w-14 text-center">S.No</th>
-                                  <th className="py-2.5 px-3.5 min-w-[140px]">Register Number</th>
-                                  <th className="py-2.5 px-3.5 min-w-[180px]">Student Name</th>
-                                  <th className="py-2.5 px-3 min-w-[90px]">Year</th>
-                                  <th className="py-2.5 px-3.5 min-w-[170px]">Residence / Transport</th>
-                                  <th className="py-2.5 px-3.5 min-w-[180px]">Boarding Stop</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100 font-medium">
-                                {group.students.map((student, sIdx) => {
-                                  const roll = extractRollNumber(student.identifier);
-                                  const sNo = roll ? roll.rollNo : sIdx + 1;
-                                  const isHostel = Boolean(student.isHostel || student.busRouteId === null || (!student.busRouteName && !student.stoppingName));
-                                  return (
-                                    <tr key={student.id || student.identifier} className="hover:bg-slate-50/70">
-                                      <td className="py-2 px-3 text-center font-mono font-bold text-indigo-950">
-                                        #{sNo}
-                                      </td>
-                                      <td className="py-2 px-3.5 font-mono font-bold text-slate-900">
-                                        <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] border border-slate-200">
-                                          {student.identifier}
-                                        </span>
-                                      </td>
-                                      <td className="py-2 px-3.5 font-bold text-slate-900 uppercase">
-                                        {student.studentName}
-                                      </td>
-                                      <td className="py-2 px-3 font-semibold text-slate-700">
-                                        {student.yearOrSection}
-                                      </td>
-                                      <td className="py-2 px-3.5">
-                                        {isHostel ? (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                            🏢 Hostel Resident
-                                          </span>
-                                        ) : (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200">
-                                            🚌 {student.busRouteName || 'Bus'}
-                                          </span>
-                                        )}
-                                      </td>
-                                      <td className="py-2 px-3.5 font-semibold text-slate-700">
-                                        {isHostel ? 'Hostel' : (student.stoppingName || '—')}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
+                        {/* Year Subsections under this Department */}
+                        <div className="space-y-4">
+                          {deptGroup.years.map((yearBatch) => (
+                            <div
+                              key={yearBatch.year}
+                              className="rounded-2xl border border-slate-200/90 overflow-hidden bg-slate-50/30"
+                            >
+                              {/* Year Batch Header */}
+                              <div className="px-4 py-2.5 bg-gradient-to-r from-slate-100 to-indigo-50/60 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-slate-900 text-xs sm:text-sm">
+                                    🎓 {yearBatch.year}
+                                  </span>
+                                  <span className="text-[11px] text-slate-400 font-normal">
+                                    ({deptGroup.deptCode})
+                                  </span>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                                  <span className="font-mono font-bold text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded-md">
+                                    {yearBatch.totalSubmitted} Registered
+                                  </span>
+                                  <span className="font-mono text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                                    🚌 {yearBatch.busCount} Bus
+                                  </span>
+                                  <span className="font-mono text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                                    🏢 {yearBatch.hostelCount} Hostel
+                                  </span>
+                                  {yearBatch.missingCount > 0 ? (
+                                    <span className="font-mono font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
+                                      {yearBatch.missingCount} Missing
+                                    </span>
+                                  ) : (
+                                    <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                      0 Missing ✓
+                                    </span>
+                                  )}
+                                  {yearBatch.isVerified ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold bg-emerald-600 text-white shadow-2xs">
+                                      <CheckCircle2 className="h-3 w-3" />
+                                      Verified ✓
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded-md font-semibold bg-slate-200 text-slate-700">
+                                      Pending
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Student Table for this Specific Year Batch */}
+                              {yearBatch.students.length === 0 ? (
+                                <div className="py-5 text-center text-slate-400 text-xs">
+                                  No registered students found for {deptGroup.deptCode} {yearBatch.year}.
+                                </div>
+                              ) : (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left border-collapse text-xs">
+                                    <thead>
+                                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                                        <th className="py-2.5 px-3 w-14 text-center">S.No</th>
+                                        <th className="py-2.5 px-3.5 min-w-[140px]">Register Number</th>
+                                        <th className="py-2.5 px-3.5 min-w-[180px]">Student Name</th>
+                                        <th className="py-2.5 px-3 min-w-[90px]">Year</th>
+                                        <th className="py-2.5 px-3.5 min-w-[170px]">Residence / Transport</th>
+                                        <th className="py-2.5 px-3.5 min-w-[180px]">Boarding Stop</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 font-medium bg-white">
+                                      {yearBatch.students.map((student, sIdx) => {
+                                        const roll = extractRollNumber(student.identifier);
+                                        const sNo = roll ? roll.rollNo : sIdx + 1;
+                                        const isHostel = Boolean(
+                                          student.isHostel ||
+                                            student.busRouteId === null ||
+                                            (!student.busRouteName && !student.stoppingName)
+                                        );
+                                        return (
+                                          <tr
+                                            key={student.id || student.identifier}
+                                            className="hover:bg-slate-50/80 transition-colors"
+                                          >
+                                            <td className="py-2 px-3 text-center font-mono font-bold text-indigo-950">
+                                              #{sNo}
+                                            </td>
+                                            <td className="py-2 px-3.5 font-mono font-bold text-slate-900">
+                                              <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] border border-slate-200">
+                                                {student.identifier}
+                                              </span>
+                                            </td>
+                                            <td className="py-2 px-3.5 font-bold text-slate-900 uppercase">
+                                              {student.studentName}
+                                            </td>
+                                            <td className="py-2 px-3 font-semibold text-slate-700">
+                                              {student.yearOrSection}
+                                            </td>
+                                            <td className="py-2 px-3.5">
+                                              {isHostel ? (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                                  🏢 Hostel Resident
+                                                </span>
+                                              ) : (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                                                  🚌 {student.busRouteName || 'Bus'}
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td className="py-2 px-3.5 font-semibold text-slate-700">
+                                              {isHostel ? 'Hostel' : student.stoppingName || '—'}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))
                   )}
                 </div>
-              </div>
+              )}
+
+              {/* VIEW MODE 2: Comprehensive Department & Year-Wise Summary Table */}
+              {reportViewMode === 'table' && (
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs print-break-inside-avoid">
+                  <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4 text-indigo-600" />
+                      <h3 className="font-bold text-slate-900 text-xs sm:text-sm">
+                        Department &amp; Year-Wise Registration Summary Matrix
+                      </h3>
+                    </div>
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      {ENGINEERING_DEPARTMENTS.length * COLLEGE_YEARS.length} Total Batches (7 Departments × 4 Years)
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-100/90 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                          <th className="py-3 px-3.5 w-12 text-center">S.No</th>
+                          <th className="py-3 px-3.5 min-w-[70px]">Code</th>
+                          <th className="py-3 px-3.5 min-w-[200px]">Department Name</th>
+                          <th className="py-3 px-3.5 min-w-[100px] text-center font-extrabold bg-indigo-50/70 text-indigo-950">
+                            Year of Study
+                          </th>
+                          <th className="py-3 px-3.5 text-center min-w-[100px] font-black text-slate-900">
+                            Total Reg
+                          </th>
+                          <th className="py-3 px-3 text-center min-w-[80px]">Bus</th>
+                          <th className="py-3 px-3 text-center min-w-[80px]">Hostel</th>
+                          <th className="py-3 px-3 text-center min-w-[80px]">Missing</th>
+                          <th className="py-3 px-3.5 text-center min-w-[110px]">Batch Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium">
+                        {(() => {
+                          let sNo = 1;
+                          const filteredDepts = reportActiveDeptTab === 'ALL'
+                            ? departmentGroupsWithYears
+                            : departmentGroupsWithYears.filter((d) => d.deptName === reportActiveDeptTab);
+
+                          return filteredDepts.map((deptGroup) => {
+                            const batchesToDisplay = reportYearFilter === 'ALL'
+                              ? deptGroup.yearBatches
+                              : deptGroup.yearBatches.filter((b) => b.year === reportYearFilter);
+
+                            return (
+                              <React.Fragment key={deptGroup.deptCode}>
+                                {batchesToDisplay.map((batch) => (
+                                  <tr
+                                    key={`${deptGroup.deptCode}-${batch.year}`}
+                                    className="hover:bg-indigo-50/20 transition-colors"
+                                  >
+                                    <td className="py-2.5 px-3.5 text-center font-mono text-slate-400 font-semibold">
+                                      {sNo++}
+                                    </td>
+                                    <td className="py-2.5 px-3.5 font-mono font-bold text-slate-900">
+                                      <span className="bg-slate-100 px-2 py-0.5 rounded text-indigo-900 font-extrabold border border-slate-200">
+                                        {deptGroup.deptCode}
+                                      </span>
+                                    </td>
+                                    <td className="py-2.5 px-3.5 font-semibold text-slate-900">
+                                      {deptGroup.deptName}
+                                    </td>
+                                    <td className="py-2.5 px-3.5 text-center font-bold text-indigo-900 bg-indigo-50/40">
+                                      {batch.year}
+                                    </td>
+                                    <td className="py-2.5 px-3.5 text-center font-mono font-black text-indigo-900 text-sm">
+                                      {batch.totalSubmitted}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-center font-mono text-blue-700 font-semibold">
+                                      {batch.busCount}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-center font-mono text-amber-700 font-semibold">
+                                      {batch.hostelCount}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-center font-mono">
+                                      {batch.missingCount > 0 ? (
+                                        <span className="text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                          {batch.missingCount}
+                                        </span>
+                                      ) : (
+                                        <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                          0
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2.5 px-3.5 text-center">
+                                      {batch.isVerified ? (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                          Verified ✓
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                          Pending
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+
+                                {/* Department Subtotal Row */}
+                                {reportYearFilter === 'ALL' && (
+                                  <tr className="bg-slate-50 font-bold text-slate-800 border-y border-slate-200 text-[11px]">
+                                    <td colSpan={3} className="py-2 px-3.5 text-right font-bold text-slate-700">
+                                      Subtotal ({deptGroup.deptCode} - All 4 Years):
+                                    </td>
+                                    <td className="py-2 px-3.5 text-center text-slate-500 font-mono">
+                                      4 Years
+                                    </td>
+                                    <td className="py-2 px-3.5 text-center font-mono font-black text-indigo-950">
+                                      {deptGroup.totalSubmitted}
+                                    </td>
+                                    <td className="py-2 px-3 text-center font-mono text-blue-700">
+                                      {deptGroup.busCount}
+                                    </td>
+                                    <td className="py-2 px-3 text-center font-mono text-amber-700">
+                                      {deptGroup.hostelCount}
+                                    </td>
+                                    <td className="py-2 px-3 text-center font-mono text-rose-600">
+                                      {deptGroup.missingCount}
+                                    </td>
+                                    <td className="py-2 px-3.5 text-center font-mono text-emerald-700">
+                                      {deptGroup.verifiedYearsCount}/4 Verified
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-900 text-white font-bold text-xs">
+                          <td colSpan={4} className="py-3 px-3.5 text-right uppercase tracking-wider font-extrabold text-[11px]">
+                            Grand Totals (All Engineering Depts &amp; Batches):
+                          </td>
+                          <td className="py-3 px-3.5 text-center font-mono font-black text-amber-300 text-sm">
+                            {departmentWiseGrandTotals.totalSubmitted}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-blue-200">
+                            {departmentWiseGrandTotals.totalBus}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-amber-200">
+                            {departmentWiseGrandTotals.totalHostel}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-rose-300">
+                            {departmentWiseGrandTotals.totalMissing}
+                          </td>
+                          <td className="py-3 px-3.5 text-center font-mono text-emerald-300">
+                            {totalVerifiedBatches} Batches Verified
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* VIEW MODE 3: Visual Year-Wise Batch Cards for Each Department */}
+              {reportViewMode === 'cards' && (
+                <div className="space-y-6">
+                  {departmentGroupsWithYears.map((deptGroup) => (
+                    <div
+                      key={deptGroup.deptCode}
+                      className="bg-white rounded-3xl border border-slate-200 p-5 space-y-4 shadow-2xs print-break-inside-avoid"
+                    >
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                        <div className="flex items-center gap-2.5">
+                          <span className="font-mono text-xs font-black px-2.5 py-1 rounded-xl bg-indigo-900 text-white">
+                            {deptGroup.deptCode}
+                          </span>
+                          <div>
+                            <h4 className="font-bold text-slate-900 text-sm">{deptGroup.deptName}</h4>
+                            <p className="text-[11px] text-slate-400">Year-by-Year Status &amp; Counts</p>
+                          </div>
+                        </div>
+                        <span className="text-xs font-mono font-bold text-indigo-900 bg-indigo-50 px-3 py-1 rounded-xl border border-indigo-200">
+                          {deptGroup.totalSubmitted} Registered Total
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {deptGroup.yearBatches.map((batch) => (
+                          <div
+                            key={batch.year}
+                            className={`p-4 rounded-2xl border transition-all ${
+                              batch.isVerified
+                                ? 'bg-emerald-50/70 border-emerald-300 ring-1 ring-emerald-200'
+                                : batch.missingCount > 0
+                                ? 'bg-rose-50/40 border-rose-200'
+                                : 'bg-slate-50 border-slate-200'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-bold text-slate-900 text-xs">🎓 {batch.year}</span>
+                              {batch.isVerified ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white shadow-2xs">
+                                  ✓ Verified
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-700">
+                                  Pending
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="mt-2 flex items-baseline gap-1.5">
+                              <span className="text-xl font-black text-slate-900 font-mono">{batch.totalSubmitted}</span>
+                              <span className="text-[11px] text-slate-500 font-medium">Students</span>
+                            </div>
+
+                            <div className="mt-2.5 pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px]">
+                              <span className="text-blue-700 font-semibold">🚌 {batch.busCount} Bus</span>
+                              <span className="text-amber-700 font-semibold">🏢 {batch.hostelCount} Hostel</span>
+                            </div>
+
+                            {batch.missingCount > 0 && (
+                              <div className="mt-2 text-[10px] font-bold text-rose-700 bg-rose-100/70 px-2 py-1 rounded-lg border border-rose-200">
+                                ⚠️ {batch.missingCount} Missing Register Numbers
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Official Signatures Section for Printed Submissions */}
               <div className="pt-8 mt-6 border-t border-slate-200 grid grid-cols-3 gap-6 text-center text-xs print:grid">

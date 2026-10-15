@@ -146,24 +146,33 @@ async function exportStudents() {
     console.log('-------------------------------------------------------------------------------------\n');
 
     deptReportLines.push('');
-    deptReportLines.push('"=== DETAILED STUDENT ROSTERS (GROUPED BY DEPARTMENT) ==="');
-    deptReportLines.push('"Department","S.No","Register Number","Student Name","Year / Section","Bus Route","Boarding Stop","Registered Date"');
+    deptReportLines.push('"=== DETAILED STUDENT ROSTERS (ORGANIZED BY DEPARTMENT & YEAR) ==="');
+    deptReportLines.push('"Department","Year of Study","S.No","Register Number","Student Name","Bus Route","Boarding Stop","Registered Date"');
+
+    const COLLEGE_YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 
     for (const [dept, deptStudents] of deptMap.entries()) {
-      deptStudents.forEach((s, idx) => {
-        const safe = (v) => `"${(v || '').toString().replace(/"/g, '""')}"`;
-        deptReportLines.push(
-          [
-            safe(dept),
-            idx + 1,
-            safe(s.identifier),
-            safe(s.student_name),
-            safe(s.year_or_section),
-            safe(s.bus_route_name || 'Hostel'),
-            safe(s.stopping_name || 'Hostel'),
-            safe(s.created_at),
-          ].join(',')
-        );
+      COLLEGE_YEARS.forEach((yr) => {
+        const yearStudents = deptStudents.filter((s) => s.year_or_section === yr);
+        if (yearStudents.length > 0) {
+          deptReportLines.push(`"--- ${dept} - ${yr} (${yearStudents.length} Students) ---","","","","","","",""`);
+          yearStudents.forEach((s, idx) => {
+            const safe = (v) => `"${(v || '').toString().replace(/"/g, '""')}"`;
+            deptReportLines.push(
+              [
+                safe(dept),
+                safe(yr),
+                idx + 1,
+                safe(s.identifier),
+                safe(s.student_name),
+                safe(s.bus_route_name || 'Hostel'),
+                safe(s.stopping_name || 'Hostel'),
+                safe(s.created_at),
+              ].join(',')
+            );
+          });
+          deptReportLines.push('');
+        }
       });
     }
 
