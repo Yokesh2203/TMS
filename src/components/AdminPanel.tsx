@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Building2,
   Search,
@@ -226,6 +227,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [reportYearFilter, setReportYearFilter] = useState<string>('ALL');
   const [reportViewMode, setReportViewMode] = useState<'roster' | 'table' | 'cards'>('roster');
 
+  const handleOpenReportModal = () => {
+    setReportActiveDeptTab(selectedDept);
+    setReportYearFilter(selectedYear);
+    setShowDeptReportModal(true);
+  };
+
   // Department + Year granular verification state (Set of "${deptName}___${year}" strings verified by admin)
   const [verifiedDeptYears, setVerifiedDeptYears] = useState<Set<string>>(() => {
     try {
@@ -435,6 +442,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         busRouteName: '-',
         stoppingName: '-',
         isSubmitted: false,
+        rawStudent: undefined,
       };
     });
 
@@ -912,10 +920,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => {
-              setReportActiveDeptTab(selectedDept);
-              setShowDeptReportModal(true);
-            }}
+            onClick={handleOpenReportModal}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-xs hover:shadow transition-all cursor-pointer"
             title="Open registered students report"
           >
@@ -1386,10 +1391,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <button
               type="button"
-              onClick={() => {
-                setReportActiveDeptTab(selectedDept);
-                setShowDeptReportModal(true);
-              }}
+              onClick={handleOpenReportModal}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-all cursor-pointer"
               title={`View ${getDeptShortCode(selectedDept)} Year-Wise Registered Students Report`}
             >
@@ -1944,289 +1946,351 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       )}
 
       {/* Department-Wise Report Modal (Exact Match to User Mockup) */}
-      {showDeptReportModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col p-2 sm:p-6 overflow-y-auto animate-in fade-in duration-150">
-          {/* Print Styles */}
-          <style>{`
-            @media print {
-              body * {
-                visibility: hidden !important;
+      {showDeptReportModal &&
+        createPortal(
+          <div
+            id="printable-report-portal"
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col p-2 sm:p-6 overflow-y-auto animate-in fade-in duration-150"
+          >
+            {/* Print Styles */}
+            <style>{`
+              @media print {
+                @page {
+                  size: A4 portrait;
+                  margin: 10mm 10mm;
+                }
+                html, body {
+                  height: auto !important;
+                  min-height: 0 !important;
+                  overflow: visible !important;
+                  background: #000000 !important;
+                  color: #ffffff !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+                #root {
+                  display: none !important;
+                  height: 0 !important;
+                  overflow: hidden !important;
+                }
+                #printable-report-portal {
+                  position: static !important;
+                  inset: auto !important;
+                  display: block !important;
+                  width: 100% !important;
+                  height: auto !important;
+                  min-height: 0 !important;
+                  max-height: none !important;
+                  overflow: visible !important;
+                  background: #000000 !important;
+                  color: #ffffff !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  backdrop-filter: none !important;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+                #printable-dept-report {
+                  display: block !important;
+                  position: static !important;
+                  width: 100% !important;
+                  max-width: 100% !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
+                }
+                .no-print, .print\\:hidden {
+                  display: none !important;
+                }
+                .print-card {
+                  background: #000000 !important;
+                  color: #ffffff !important;
+                  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                  box-shadow: none !important;
+                  border-radius: 1.5rem !important;
+                  padding: 2rem !important;
+                  margin: 0 0 1.5rem 0 !important;
+                  width: 100% !important;
+                  box-sizing: border-box !important;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+                .print-page-break {
+                  break-after: page !important;
+                  page-break-after: always !important;
+                }
+                .print-break-inside-avoid {
+                  break-inside: avoid !important;
+                  page-break-inside: avoid !important;
+                }
+                table {
+                  page-break-inside: auto !important;
+                  break-inside: auto !important;
+                }
+                tr {
+                  page-break-inside: avoid !important;
+                  break-inside: avoid !important;
+                }
+                thead {
+                  display: table-header-group !important;
+                }
               }
-              #printable-dept-report, #printable-dept-report * {
-                visibility: visible !important;
-              }
-              #printable-dept-report {
-                position: absolute !important;
-                left: 0 !important;
-                top: 0 !important;
-                width: 100% !important;
-                background: #000000 !important;
-                color: #ffffff !important;
-                margin: 0 !important;
-                padding: 24px !important;
-                box-shadow: none !important;
-                border: none !important;
-                max-height: none !important;
-                overflow: visible !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
-              .no-print, .print\\:hidden {
-                display: none !important;
-              }
-              .print-break-inside-avoid {
-                break-inside: avoid;
-                page-break-inside: avoid;
-              }
-            }
-          `}</style>
+            `}</style>
 
-          {/* Top Control Bar (Screen only, hidden on print) */}
-          <div className="max-w-4xl w-full mx-auto mb-4 bg-slate-900/95 border border-slate-800 rounded-2xl p-3.5 flex flex-col md:flex-row items-center justify-between gap-3 shadow-xl print:hidden no-print">
-            {/* Department Selector Pills */}
-            <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
-              <span className="text-[10px] uppercase font-bold text-slate-400 mr-1">Dept:</span>
-              {ENGINEERING_DEPARTMENTS.map((d) => {
-                const count = students.filter((s) => s.departmentOrClass === d.name).length;
-                const isSelected = reportActiveDeptTab === d.name;
-                const label = d.code === 'AD' ? 'AI & DS' : d.code;
-                return (
-                  <button
-                    key={d.code}
-                    type="button"
-                    onClick={() => setReportActiveDeptTab(d.name)}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-white text-black shadow'
-                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
-                    }`}
-                  >
-                    <span>{label}</span>
-                    <span className={`text-[10px] px-1 rounded-full font-mono ${isSelected ? 'bg-slate-200 text-slate-900' : 'bg-slate-900 text-slate-400'}`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                onClick={() => setReportActiveDeptTab('ALL')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  reportActiveDeptTab === 'ALL'
-                    ? 'bg-white text-black shadow'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
-                }`}
-              >
-                All Depts
-              </button>
-            </div>
-
-            {/* Year Selector & Actions */}
-            <div className="flex flex-wrap items-center justify-between md:justify-end gap-2.5 w-full md:w-auto">
-              {/* Year Filter */}
-              <div className="inline-flex items-center bg-slate-800/90 p-0.5 rounded-lg border border-slate-700/60 text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setReportYearFilter('ALL')}
-                  className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
-                    reportYearFilter === 'ALL' ? 'bg-white text-black font-bold' : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  All Years
-                </button>
-                {COLLEGE_YEARS.map((yr) => {
-                  const roman = yr.includes('1') ? 'I' : yr.includes('2') ? 'II' : yr.includes('3') ? 'III' : 'IV';
+            {/* Top Control Bar (Screen only, hidden on print) */}
+            <div className="max-w-4xl w-full mx-auto mb-4 bg-slate-900/95 border border-slate-800 rounded-2xl p-3.5 flex flex-col md:flex-row items-center justify-between gap-3 shadow-xl print:hidden no-print">
+              {/* Department Selector Pills */}
+              <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
+                <span className="text-[10px] uppercase font-bold text-slate-400 mr-1">Dept:</span>
+                {ENGINEERING_DEPARTMENTS.map((d) => {
+                  const count = students.filter((s) => s.departmentOrClass === d.name).length;
+                  const isSelected = reportActiveDeptTab === d.name;
+                  const label = d.code === 'AD' ? 'AI & DS' : d.code;
                   return (
                     <button
-                      key={yr}
+                      key={d.code}
                       type="button"
-                      onClick={() => setReportYearFilter(yr)}
-                      className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
-                        reportYearFilter === yr ? 'bg-white text-black font-bold' : 'text-slate-300 hover:text-white'
+                      onClick={() => setReportActiveDeptTab(d.name)}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-white text-black shadow'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
                       }`}
-                      title={yr}
                     >
-                      {roman} Year
+                      <span>{label}</span>
+                      <span className={`text-[10px] px-1 rounded-full font-mono ${isSelected ? 'bg-slate-200 text-slate-900' : 'bg-slate-900 text-slate-400'}`}>
+                        {count}
+                      </span>
                     </button>
                   );
                 })}
+                <button
+                  type="button"
+                  onClick={() => setReportActiveDeptTab('ALL')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    reportActiveDeptTab === 'ALL'
+                      ? 'bg-white text-black shadow'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
+                  }`}
+                >
+                  All Depts
+                </button>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-black hover:bg-slate-200 transition-all cursor-pointer shadow-xs"
-                  title="Print / Save as PDF"
-                >
-                  <Printer className="h-3.5 w-3.5" />
-                  <span>Print</span>
-                </button>
+              {/* Year Selector & Actions */}
+              <div className="flex flex-wrap items-center justify-between md:justify-end gap-2.5 w-full md:w-auto">
+                {/* Year Filter */}
+                <div className="inline-flex items-center bg-slate-800/90 p-0.5 rounded-lg border border-slate-700/60 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setReportYearFilter('ALL')}
+                    className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
+                      reportYearFilter === 'ALL' ? 'bg-white text-black font-bold' : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    All Years
+                  </button>
+                  {COLLEGE_YEARS.map((yr) => {
+                    const roman = yr.includes('1') ? 'I' : yr.includes('2') ? 'II' : yr.includes('3') ? 'III' : 'IV';
+                    return (
+                      <button
+                        key={yr}
+                        type="button"
+                        onClick={() => setReportYearFilter(yr)}
+                        className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
+                          reportYearFilter === yr ? 'bg-white text-black font-bold' : 'text-slate-300 hover:text-white'
+                        }`}
+                        title={yr}
+                      >
+                        {roman} Year
+                      </button>
+                    );
+                  })}
+                </div>
 
-                <button
-                  type="button"
-                  onClick={handleExportDepartmentWiseCSV}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
-                  title="Export to CSV"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span>CSV</span>
-                </button>
+                {/* Action Buttons */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-black hover:bg-slate-200 transition-all cursor-pointer shadow-xs"
+                    title="Print / Save as PDF"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    <span>Print</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setShowDeptReportModal(false)}
-                  className="h-7 w-7 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-200 flex items-center justify-center transition-colors cursor-pointer border border-slate-700"
-                  title="Close Report"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleExportDepartmentWiseCSV}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
+                    title="Export to CSV"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>CSV</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowDeptReportModal(false)}
+                    className="h-7 w-7 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-200 flex items-center justify-center transition-colors cursor-pointer border border-slate-700"
+                    title="Close Report"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Printable Report Document (exact match to user mockup) */}
-          <div id="printable-dept-report" className="max-w-4xl w-full mx-auto space-y-8 my-auto">
-            {(() => {
-              const deptsToRender = reportActiveDeptTab === 'ALL'
-                ? ENGINEERING_DEPARTMENTS
-                : ENGINEERING_DEPARTMENTS.filter((d) => d.name === reportActiveDeptTab);
+            {/* Printable Report Document (exact match to user mockup) */}
+            <div id="printable-dept-report" className="max-w-4xl w-full mx-auto space-y-8 my-auto">
+              {(() => {
+                const deptsToRender = reportActiveDeptTab === 'ALL'
+                  ? ENGINEERING_DEPARTMENTS
+                  : ENGINEERING_DEPARTMENTS.filter((d) => d.name === reportActiveDeptTab);
 
-              const todayStr = (() => {
-                const now = new Date();
-                const dd = String(now.getDate()).padStart(2, '0');
-                const mm = String(now.getMonth() + 1).padStart(2, '0');
-                const yyyy = now.getFullYear();
-                return `${dd}-${mm}-${yyyy}`;
-              })();
+                const todayStr = (() => {
+                  const now = new Date();
+                  const dd = String(now.getDate()).padStart(2, '0');
+                  const mm = String(now.getMonth() + 1).padStart(2, '0');
+                  const yyyy = now.getFullYear();
+                  return `${dd}-${mm}-${yyyy}`;
+                })();
 
-              const getDeptLabel = (name: string, code: string) => {
-                if (code === 'AD' || name.includes('Artificial Intelligence')) return 'AI & DS';
-                return code || name;
-              };
+                const getDeptLabel = (name: string, code: string) => {
+                  if (code === 'AD' || name.includes('Artificial Intelligence')) return 'AI & DS';
+                  return code || name;
+                };
 
-              const toRoman = (yr: string) => {
-                if (yr.includes('1')) return 'I Year';
-                if (yr.includes('2')) return 'II Year';
-                if (yr.includes('3')) return 'III Year';
-                if (yr.includes('4')) return 'IV Year';
-                return yr;
-              };
+                const toRoman = (yr: string) => {
+                  if (yr.includes('1')) return 'I Year';
+                  if (yr.includes('2')) return 'II Year';
+                  if (yr.includes('3')) return 'III Year';
+                  if (yr.includes('4')) return 'IV Year';
+                  return yr;
+                };
 
-              return deptsToRender.map((dept) => {
-                const yearsToRender = reportYearFilter === 'ALL'
-                  ? COLLEGE_YEARS
-                  : COLLEGE_YEARS.filter((y) => y === reportYearFilter);
+                return deptsToRender.map((dept, deptIdx) => {
+                  const yearsToRender = reportYearFilter === 'ALL'
+                    ? COLLEGE_YEARS
+                    : COLLEGE_YEARS.filter((y) => y === reportYearFilter);
 
-                return yearsToRender.map((yr) => {
-                  let batchStudents = students.filter(
-                    (s) => s.departmentOrClass === dept.name && s.yearOrSection === yr
-                  );
+                  return yearsToRender.map((yr, yrIdx) => {
+                    const isLastCard =
+                      deptIdx === deptsToRender.length - 1 &&
+                      yrIdx === yearsToRender.length - 1;
 
-                  // Sort by Roll Number / Register Number
-                  batchStudents.sort((a, b) => {
-                    const aRoll = extractRollNumber(a.identifier);
-                    const bRoll = extractRollNumber(b.identifier);
-                    if (aRoll && bRoll && aRoll.rollNo !== bRoll.rollNo) {
-                      return aRoll.rollNo - bRoll.rollNo;
-                    }
-                    return a.identifier.localeCompare(b.identifier, undefined, { numeric: true });
-                  });
+                    let batchStudents = students.filter(
+                      (s) => s.departmentOrClass === dept.name && s.yearOrSection === yr
+                    );
 
-                  return (
-                    <div
-                      key={`${dept.code}-${yr}`}
-                      className="bg-black text-white p-7 sm:p-12 rounded-3xl border border-white/15 shadow-2xl font-sans print:border-none print:shadow-none print:p-0 print-break-inside-avoid"
-                    >
-                      {/* Centered Heading */}
-                      <div className="text-center space-y-1">
-                        <h2 className="text-xl sm:text-2xl font-bold tracking-wider uppercase text-white">
-                          STUDENT REGISTRATION REPORT
-                        </h2>
-                        <p className="text-xs sm:text-sm text-slate-300 font-normal">
-                          Transport Management System (TMS)
-                        </p>
-                        <p className="text-xs sm:text-sm text-slate-200 font-semibold">
-                          Nadar Saraswathi College of Engineering and Technology
-                        </p>
-                      </div>
+                    // Sort by Roll Number / Register Number
+                    batchStudents.sort((a, b) => {
+                      const aRoll = extractRollNumber(a.identifier);
+                      const bRoll = extractRollNumber(b.identifier);
+                      if (aRoll && bRoll && aRoll.rollNo !== bRoll.rollNo) {
+                        return aRoll.rollNo - bRoll.rollNo;
+                      }
+                      return a.identifier.localeCompare(b.identifier, undefined, { numeric: true });
+                    });
 
-                      {/* Divider */}
-                      <div className="border-t border-white/20 my-6 sm:my-8" />
-
-                      {/* Metadata 2x2 Grid */}
-                      <div className="grid grid-cols-2 gap-y-6 gap-x-8 text-sm">
-                        <div>
-                          <p className="text-xs text-slate-400 mb-1">Department</p>
-                          <p className="text-base sm:text-lg font-bold text-white tracking-wide">
-                            {getDeptLabel(dept.name, dept.code)}
+                    return (
+                      <div
+                        key={`${dept.code}-${yr}`}
+                        className={`bg-black text-white p-7 sm:p-12 rounded-3xl border border-white/15 shadow-2xl font-sans print-card print-break-inside-avoid ${
+                          !isLastCard ? 'print-page-break' : ''
+                        }`}
+                      >
+                        {/* Centered Heading */}
+                        <div className="text-center space-y-1">
+                          <h2 className="text-xl sm:text-2xl font-bold tracking-wider uppercase text-white">
+                            STUDENT REGISTRATION REPORT
+                          </h2>
+                          <p className="text-xs sm:text-sm text-slate-300 font-normal">
+                            Transport Management System (TMS)
+                          </p>
+                          <p className="text-xs sm:text-sm text-slate-200 font-semibold">
+                            Nadar Saraswathi College of Engineering and Technology
                           </p>
                         </div>
-                        <div>
-                          <p className="text-xs text-slate-400 mb-1">Year</p>
-                          <p className="text-base sm:text-lg font-bold text-white tracking-wide">
-                            {toRoman(yr)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-400 mb-1">Report Date</p>
-                          <p className="text-base sm:text-lg font-bold text-white tracking-wide">
-                            {todayStr}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-400 mb-1">Total Registered</p>
-                          <p className="text-base sm:text-lg font-bold text-white tracking-wide">
-                            {batchStudents.length} Students
-                          </p>
-                        </div>
-                      </div>
 
-                      {/* Student Table */}
-                      <div className="mt-8 overflow-x-auto">
-                        <table className="w-full text-left border-collapse text-sm">
-                          <thead>
-                            <tr className="border-b border-white/20 text-white font-bold text-sm">
-                              <th className="py-3 px-2 w-20">S.No</th>
-                              <th className="py-3 px-6 min-w-[200px]">Register Number</th>
-                              <th className="py-3 px-6 min-w-[240px]">Student Name</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-white/10 font-normal">
-                            {batchStudents.length === 0 ? (
-                              <tr>
-                                <td colSpan={3} className="py-8 text-center text-slate-500 italic">
-                                  No registered students found for this year.
-                                </td>
+                        {/* Divider */}
+                        <div className="border-t border-white/20 my-6 sm:my-8" />
+
+                        {/* Metadata 2x2 Grid */}
+                        <div className="grid grid-cols-2 gap-y-6 gap-x-8 text-sm">
+                          <div>
+                            <p className="text-xs text-slate-400 mb-1">Department</p>
+                            <p className="text-base sm:text-lg font-bold text-white tracking-wide">
+                              {getDeptLabel(dept.name, dept.code)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-400 mb-1">Year</p>
+                            <p className="text-base sm:text-lg font-bold text-white tracking-wide">
+                              {toRoman(yr)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-400 mb-1">Report Date</p>
+                            <p className="text-base sm:text-lg font-bold text-white tracking-wide">
+                              {todayStr}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-400 mb-1">Total Registered</p>
+                            <p className="text-base sm:text-lg font-bold text-white tracking-wide">
+                              {batchStudents.length} Students
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Student Table */}
+                        <div className="mt-8 overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-sm">
+                            <thead>
+                              <tr className="border-b border-white/20 text-white font-bold text-sm">
+                                <th className="py-3 px-2 w-20">S.No</th>
+                                <th className="py-3 px-6 min-w-[200px]">Register Number</th>
+                                <th className="py-3 px-6 min-w-[240px]">Student Name</th>
                               </tr>
-                            ) : (
-                              batchStudents.map((student, idx) => (
-                                <tr
-                                  key={student.id || student.identifier}
-                                  className="hover:bg-white/5 transition-colors"
-                                >
-                                  <td className="py-3.5 px-2 text-slate-300 font-mono">{idx + 1}</td>
-                                  <td className="py-3.5 px-6 text-white font-mono font-medium tracking-wide">
-                                    {student.identifier}
-                                  </td>
-                                  <td className="py-3.5 px-6 text-white uppercase font-bold tracking-wide">
-                                    {student.studentName}
+                            </thead>
+                            <tbody className="divide-y divide-white/10 font-normal">
+                              {batchStudents.length === 0 ? (
+                                <tr>
+                                  <td colSpan={3} className="py-8 text-center text-slate-500 italic">
+                                    No registered students found for this year.
                                   </td>
                                 </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
+                              ) : (
+                                batchStudents.map((student, idx) => (
+                                  <tr
+                                    key={student.id || student.identifier}
+                                    className="hover:bg-white/5 transition-colors"
+                                  >
+                                    <td className="py-3.5 px-2 text-slate-300 font-mono">{idx + 1}</td>
+                                    <td className="py-3.5 px-6 text-white font-mono font-medium tracking-wide">
+                                      {student.identifier}
+                                    </td>
+                                    <td className="py-3.5 px-6 text-white uppercase font-bold tracking-wide">
+                                      {student.studentName}
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                    </div>
-                  );
+                    );
+                  });
                 });
-              });
-            })()}
-          </div>
-        </div>
-      )}
+              })()}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
