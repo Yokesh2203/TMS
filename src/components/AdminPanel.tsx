@@ -683,8 +683,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       `"Department Name"`,
       `"Year of Study"`,
       `"Total Registered"`,
-      `"Bus Users (Day Scholars)"`,
-      `"Hostellers"`,
       `"Missing Register Numbers"`,
       `"Batch Verification Status"`,
     ].join(','));
@@ -698,8 +696,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           `"${deptGroup.deptName}"`,
           `"${batch.year}"`,
           `"${batch.totalSubmitted}"`,
-          `"${batch.busCount}"`,
-          `"${batch.hostelCount}"`,
           `"${batch.missingCount}"`,
           `"${batch.isVerified ? 'Verified ✓' : 'Pending'}"`,
         ].join(','));
@@ -712,8 +708,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         `"${deptGroup.deptName} (All 4 Years)"`,
         `"All Years"`,
         `"${deptGroup.totalSubmitted}"`,
-        `"${deptGroup.busCount}"`,
-        `"${deptGroup.hostelCount}"`,
         `"${deptGroup.missingCount}"`,
         `"${deptGroup.verifiedYearsCount}/${COLLEGE_YEARS.length} Years Verified"`,
       ].join(','));
@@ -728,8 +722,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       `"All Engineering Departments"`,
       `"All Batches (1st - 4th Yr)"`,
       `"${departmentWiseGrandTotals.totalSubmitted}"`,
-      `"${departmentWiseGrandTotals.totalBus}"`,
-      `"${departmentWiseGrandTotals.totalHostel}"`,
       `"${departmentWiseGrandTotals.totalMissing}"`,
       `"${totalVerifiedBatches}/${ENGINEERING_DEPARTMENTS.length * COLLEGE_YEARS.length} Batches Verified"`,
     ].join(','));
@@ -745,16 +737,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       `"Roll No / S.No"`,
       `"Register Number"`,
       `"Student Name"`,
-      `"Residence Type"`,
-      `"Bus Route"`,
-      `"Boarding Stop"`,
       `"Status"`,
     ].join(','));
 
     departmentGroupsWithYears.forEach((deptGroup) => {
       deptGroup.yearBatches.forEach((batch) => {
         if (batch.students.length > 0) {
-          lines.push(`"--- ${deptGroup.deptName} (${deptGroup.deptCode}) - ${batch.year} (${batch.students.length} Students) ---","","","","","","","",""`);
+          lines.push(`"--- ${deptGroup.deptName} (${deptGroup.deptCode}) - ${batch.year} (${batch.students.length} Students) ---","","","","",""`);
 
           const sortedStudents = [...batch.students].sort((a, b) => {
             const aRoll = extractRollNumber(a.identifier);
@@ -766,7 +755,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           });
 
           sortedStudents.forEach((s, idx) => {
-            const isHostel = Boolean(s.isHostel || s.busRouteId === null || (!s.busRouteName && !s.stoppingName));
             const roll = extractRollNumber(s.identifier);
             const sNo = roll ? roll.rollNo : idx + 1;
             lines.push([
@@ -775,9 +763,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               `"${sNo}"`,
               `"${s.identifier}"`,
               `"${s.studentName}"`,
-              `"${isHostel ? 'Hostel' : 'Day Scholar (Bus)'}"`,
-              `"${isHostel ? '-' : (s.busRouteName || '-')}"`,
-              `"${isHostel ? '-' : (s.stoppingName || '-')}"`,
               `"Submitted"`,
             ].join(','));
           });
@@ -923,16 +908,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </div>
 
-        {/* Action Button: Department & Year-Wise Report */}
+        {/* Action Button: Report */}
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setShowDeptReportModal(true)}
+            onClick={() => {
+              setReportActiveDeptTab(selectedDept);
+              setShowDeptReportModal(true);
+            }}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-xs hover:shadow transition-all cursor-pointer"
-            title="Open comprehensive department and year-wise registered students report & print view"
+            title="Open registered students report"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            <span>Dept &amp; Year Report</span>
+            <span>Report</span>
           </button>
         </div>
       </div>
@@ -1398,34 +1386,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <button
               type="button"
-              onClick={() => setShowDeptReportModal(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-xs transition-all cursor-pointer"
-              title="View full department & year-wise registration report & print"
+              onClick={() => {
+                setReportActiveDeptTab(selectedDept);
+                setShowDeptReportModal(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-all cursor-pointer"
+              title={`View ${getDeptShortCode(selectedDept)} Year-Wise Registered Students Report`}
             >
-              <FileSpreadsheet className="h-3.5 w-3.5 text-indigo-600" />
-              <span>Dept &amp; Year Report</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleExportDepartmentWiseCSV}
-              disabled={students.length === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-700 hover:bg-emerald-600 text-white shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Download all departments and year batches registered students in Excel / CSV"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span>Export Dept &amp; Year (CSV)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              disabled={rosterItems.length === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Download Excel / CSV spreadsheet"
-            >
-              <FileDown className="h-3.5 w-3.5" />
-              <span>Export {getDeptShortCode(selectedDept)} (CSV)</span>
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              <span>Report</span>
             </button>
 
             <button
@@ -2070,48 +2039,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             {/* Modal Body (Scrollable) */}
             <div className="p-5 sm:p-6 overflow-y-auto space-y-6 text-xs flex-1">
-              {/* Executive Summary Cards */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 print:grid-cols-4">
-                <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200 shadow-2xs">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-700">Total Registered</div>
-                  <div className="mt-1 flex items-baseline gap-2">
-                    <span className="text-2xl font-black text-indigo-950 font-mono">{students.length}</span>
-                    <span className="text-[11px] font-semibold text-indigo-600">Students</span>
-                  </div>
-                  <p className="text-[10px] text-indigo-600/80 mt-0.5">Across {ENGINEERING_DEPARTMENTS.length} Engineering Depts</p>
-                </div>
+              {/* Year-by-Year Registration Count Cards */}
+              {(() => {
+                const targetDeptStudents = reportActiveDeptTab === 'ALL'
+                  ? students
+                  : students.filter((s) => s.departmentOrClass === reportActiveDeptTab);
 
-                <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200 shadow-2xs">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-blue-700">College Bus Commuters</div>
-                  <div className="mt-1 flex items-baseline gap-2">
-                    <span className="text-2xl font-black text-blue-950 font-mono">{departmentWiseGrandTotals.totalBus}</span>
-                    <span className="text-[11px] font-semibold text-blue-600">Day Scholars</span>
-                  </div>
-                  <p className="text-[10px] text-blue-600/80 mt-0.5">
-                    {students.length > 0 ? Math.round((departmentWiseGrandTotals.totalBus / students.length) * 100) : 0}% of registered total
-                  </p>
-                </div>
+                const yrCounts: Record<string, number> = {
+                  '1st Year': targetDeptStudents.filter((s) => s.yearOrSection === '1st Year').length,
+                  '2nd Year': targetDeptStudents.filter((s) => s.yearOrSection === '2nd Year').length,
+                  '3rd Year': targetDeptStudents.filter((s) => s.yearOrSection === '3rd Year').length,
+                  '4th Year': targetDeptStudents.filter((s) => s.yearOrSection === '4th Year').length,
+                };
 
-                <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 shadow-2xs">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Hostel Residents</div>
-                  <div className="mt-1 flex items-baseline gap-2">
-                    <span className="text-2xl font-black text-amber-950 font-mono">{departmentWiseGrandTotals.totalHostel}</span>
-                    <span className="text-[11px] font-semibold text-amber-600">Hostellers</span>
+                return (
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 print:grid-cols-4">
+                    {COLLEGE_YEARS.map((yr) => (
+                      <div key={yr} className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 shadow-2xs">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-700">🎓 {yr}</div>
+                        <div className="mt-1 flex items-baseline gap-2">
+                          <span className="text-2xl font-black text-indigo-950 font-mono">{yrCounts[yr] || 0}</span>
+                          <span className="text-[11px] font-semibold text-indigo-600">Registered</span>
+                        </div>
+                        <p className="text-[10px] text-indigo-600/80 mt-0.5 font-medium">
+                          {reportActiveDeptTab === 'ALL' ? 'All Departments' : `${getDeptShortCode(reportActiveDeptTab)} Department`}
+                        </p>
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-[10px] text-amber-600/80 mt-0.5">
-                    {students.length > 0 ? Math.round((departmentWiseGrandTotals.totalHostel / students.length) * 100) : 0}% of registered total
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 shadow-2xs">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Verified Batches</div>
-                  <div className="mt-1 flex items-baseline gap-2">
-                    <span className="text-2xl font-black text-emerald-950 font-mono">{totalVerifiedBatches}</span>
-                    <span className="text-[11px] font-semibold text-emerald-600">/ {ENGINEERING_DEPARTMENTS.length * COLLEGE_YEARS.length}</span>
-                  </div>
-                  <p className="text-[10px] text-emerald-600/80 mt-0.5">Dept-Year Batches Verified</p>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* View Mode Switcher & Filter Toolbar */}
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3.5 print:hidden no-print">
@@ -2304,31 +2261,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                                  <span className="font-mono font-bold text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded-md">
-                                    {yearBatch.totalSubmitted} Registered
+                                  <span className="font-mono font-bold text-indigo-700 bg-indigo-100/70 px-2.5 py-0.5 rounded-md">
+                                    {yearBatch.totalSubmitted} Registered Students
                                   </span>
-                                  <span className="font-mono text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-                                    🚌 {yearBatch.busCount} Bus
-                                  </span>
-                                  <span className="font-mono text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                                    🏢 {yearBatch.hostelCount} Hostel
-                                  </span>
-                                  {yearBatch.missingCount > 0 ? (
-                                    <span className="font-mono font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
-                                      {yearBatch.missingCount} Missing
-                                    </span>
-                                  ) : (
-                                    <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                                      0 Missing ✓
-                                    </span>
-                                  )}
                                   {yearBatch.isVerified ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold bg-emerald-600 text-white shadow-2xs">
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-bold bg-emerald-600 text-white shadow-2xs">
                                       <CheckCircle2 className="h-3 w-3" />
                                       Verified ✓
                                     </span>
                                   ) : (
-                                    <span className="px-2 py-0.5 rounded-md font-semibold bg-slate-200 text-slate-700">
+                                    <span className="px-2.5 py-0.5 rounded-md font-semibold bg-slate-200 text-slate-700">
                                       Pending
                                     </span>
                                   )}
@@ -2345,55 +2287,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                   <table className="w-full text-left border-collapse text-xs">
                                     <thead>
                                       <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                                        <th className="py-2.5 px-3 w-14 text-center">S.No</th>
-                                        <th className="py-2.5 px-3.5 min-w-[140px]">Register Number</th>
-                                        <th className="py-2.5 px-3.5 min-w-[180px]">Student Name</th>
-                                        <th className="py-2.5 px-3 min-w-[90px]">Year</th>
-                                        <th className="py-2.5 px-3.5 min-w-[170px]">Residence / Transport</th>
-                                        <th className="py-2.5 px-3.5 min-w-[180px]">Boarding Stop</th>
+                                        <th className="py-2.5 px-4 w-16 text-center">S.No</th>
+                                        <th className="py-2.5 px-4 min-w-[180px]">Register Number</th>
+                                        <th className="py-2.5 px-4 min-w-[260px]">Student Name</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 font-medium bg-white">
                                       {yearBatch.students.map((student, sIdx) => {
                                         const roll = extractRollNumber(student.identifier);
                                         const sNo = roll ? roll.rollNo : sIdx + 1;
-                                        const isHostel = Boolean(
-                                          student.isHostel ||
-                                            student.busRouteId === null ||
-                                            (!student.busRouteName && !student.stoppingName)
-                                        );
                                         return (
                                           <tr
                                             key={student.id || student.identifier}
                                             className="hover:bg-slate-50/80 transition-colors"
                                           >
-                                            <td className="py-2 px-3 text-center font-mono font-bold text-indigo-950">
+                                            <td className="py-2.5 px-4 text-center font-mono font-bold text-indigo-950">
                                               #{sNo}
                                             </td>
-                                            <td className="py-2 px-3.5 font-mono font-bold text-slate-900">
-                                              <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] border border-slate-200">
+                                            <td className="py-2.5 px-4 font-mono font-bold text-slate-900">
+                                              <span className="bg-slate-100 px-2.5 py-1 rounded text-xs border border-slate-200">
                                                 {student.identifier}
                                               </span>
                                             </td>
-                                            <td className="py-2 px-3.5 font-bold text-slate-900 uppercase">
+                                            <td className="py-2.5 px-4 font-bold text-slate-900 uppercase text-xs">
                                               {student.studentName}
-                                            </td>
-                                            <td className="py-2 px-3 font-semibold text-slate-700">
-                                              {student.yearOrSection}
-                                            </td>
-                                            <td className="py-2 px-3.5">
-                                              {isHostel ? (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                                  🏢 Hostel Resident
-                                                </span>
-                                              ) : (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200">
-                                                  🚌 {student.busRouteName || 'Bus'}
-                                                </span>
-                                              )}
-                                            </td>
-                                            <td className="py-2 px-3.5 font-semibold text-slate-700">
-                                              {isHostel ? 'Hostel' : student.stoppingName || '—'}
                                             </td>
                                           </tr>
                                         );
@@ -2439,8 +2356,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <th className="py-3 px-3.5 text-center min-w-[100px] font-black text-slate-900">
                             Total Reg
                           </th>
-                          <th className="py-3 px-3 text-center min-w-[80px]">Bus</th>
-                          <th className="py-3 px-3 text-center min-w-[80px]">Hostel</th>
                           <th className="py-3 px-3 text-center min-w-[80px]">Missing</th>
                           <th className="py-3 px-3.5 text-center min-w-[110px]">Batch Status</th>
                         </tr>
@@ -2481,12 +2396,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                     <td className="py-2.5 px-3.5 text-center font-mono font-black text-indigo-900 text-sm">
                                       {batch.totalSubmitted}
                                     </td>
-                                    <td className="py-2.5 px-3 text-center font-mono text-blue-700 font-semibold">
-                                      {batch.busCount}
-                                    </td>
-                                    <td className="py-2.5 px-3 text-center font-mono text-amber-700 font-semibold">
-                                      {batch.hostelCount}
-                                    </td>
                                     <td className="py-2.5 px-3 text-center font-mono">
                                       {batch.missingCount > 0 ? (
                                         <span className="text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
@@ -2525,12 +2434,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                     <td className="py-2 px-3.5 text-center font-mono font-black text-indigo-950">
                                       {deptGroup.totalSubmitted}
                                     </td>
-                                    <td className="py-2 px-3 text-center font-mono text-blue-700">
-                                      {deptGroup.busCount}
-                                    </td>
-                                    <td className="py-2 px-3 text-center font-mono text-amber-700">
-                                      {deptGroup.hostelCount}
-                                    </td>
                                     <td className="py-2 px-3 text-center font-mono text-rose-600">
                                       {deptGroup.missingCount}
                                     </td>
@@ -2551,12 +2454,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           </td>
                           <td className="py-3 px-3.5 text-center font-mono font-black text-amber-300 text-sm">
                             {departmentWiseGrandTotals.totalSubmitted}
-                          </td>
-                          <td className="py-3 px-3 text-center font-mono text-blue-200">
-                            {departmentWiseGrandTotals.totalBus}
-                          </td>
-                          <td className="py-3 px-3 text-center font-mono text-amber-200">
-                            {departmentWiseGrandTotals.totalHostel}
                           </td>
                           <td className="py-3 px-3 text-center font-mono text-rose-300">
                             {departmentWiseGrandTotals.totalMissing}
@@ -2622,11 +2519,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <div className="mt-2 flex items-baseline gap-1.5">
                               <span className="text-xl font-black text-slate-900 font-mono">{batch.totalSubmitted}</span>
                               <span className="text-[11px] text-slate-500 font-medium">Students</span>
-                            </div>
-
-                            <div className="mt-2.5 pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px]">
-                              <span className="text-blue-700 font-semibold">🚌 {batch.busCount} Bus</span>
-                              <span className="text-amber-700 font-semibold">🏢 {batch.hostelCount} Hostel</span>
                             </div>
 
                             {batch.missingCount > 0 && (

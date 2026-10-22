@@ -147,7 +147,7 @@ async function exportStudents() {
 
     deptReportLines.push('');
     deptReportLines.push('"=== DETAILED STUDENT ROSTERS (ORGANIZED BY DEPARTMENT & YEAR) ==="');
-    deptReportLines.push('"Department","Year of Study","S.No","Register Number","Student Name","Bus Route","Boarding Stop","Registered Date"');
+    deptReportLines.push('"Department","Year of Study","S.No","Register Number","Student Name","Registered Date"');
 
     const COLLEGE_YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 
@@ -155,7 +155,7 @@ async function exportStudents() {
       COLLEGE_YEARS.forEach((yr) => {
         const yearStudents = deptStudents.filter((s) => s.year_or_section === yr);
         if (yearStudents.length > 0) {
-          deptReportLines.push(`"--- ${dept} - ${yr} (${yearStudents.length} Students) ---","","","","","","",""`);
+          deptReportLines.push(`"--- ${dept} - ${yr} (${yearStudents.length} Students) ---","","","","",""`);
           yearStudents.forEach((s, idx) => {
             const safe = (v) => `"${(v || '').toString().replace(/"/g, '""')}"`;
             deptReportLines.push(
@@ -165,8 +165,6 @@ async function exportStudents() {
                 idx + 1,
                 safe(s.identifier),
                 safe(s.student_name),
-                safe(s.bus_route_name || 'Hostel'),
-                safe(s.stopping_name || 'Hostel'),
                 safe(s.created_at),
               ].join(',')
             );
