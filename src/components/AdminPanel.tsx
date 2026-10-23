@@ -1957,14 +1957,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               @media print {
                 @page {
                   size: A4 portrait;
-                  margin: 10mm 10mm;
+                  margin: 15mm 15mm;
                 }
                 html, body {
                   height: auto !important;
                   min-height: 0 !important;
                   overflow: visible !important;
-                  background: #000000 !important;
-                  color: #ffffff !important;
+                  background: #ffffff !important;
+                  color: #000000 !important;
                   margin: 0 !important;
                   padding: 0 !important;
                   -webkit-print-color-adjust: exact !important;
@@ -1984,8 +1984,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   min-height: 0 !important;
                   max-height: none !important;
                   overflow: visible !important;
-                  background: #000000 !important;
-                  color: #ffffff !important;
+                  background: #ffffff !important;
+                  color: #000000 !important;
                   margin: 0 !important;
                   padding: 0 !important;
                   backdrop-filter: none !important;
@@ -2004,13 +2004,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   display: none !important;
                 }
                 .print-card {
-                  background: #000000 !important;
-                  color: #ffffff !important;
-                  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                  background: #ffffff !important;
+                  color: #000000 !important;
+                  border: none !important;
                   box-shadow: none !important;
-                  border-radius: 1.5rem !important;
-                  padding: 2rem !important;
-                  margin: 0 0 1.5rem 0 !important;
+                  border-radius: 0 !important;
+                  padding: 0 !important;
+                  margin: 0 0 2rem 0 !important;
                   width: 100% !important;
                   box-sizing: border-box !important;
                   -webkit-print-color-adjust: exact !important;
@@ -2024,9 +2024,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   break-inside: avoid !important;
                   page-break-inside: avoid !important;
                 }
-                table {
+                table.official-report-table {
+                  border-collapse: collapse !important;
+                  width: 100% !important;
+                  border: 1px solid #000000 !important;
                   page-break-inside: auto !important;
                   break-inside: auto !important;
+                }
+                table.official-report-table th, table.official-report-table td {
+                  border: 1px solid #000000 !important;
                 }
                 tr {
                   page-break-inside: avoid !important;
@@ -2150,14 +2156,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   ? ENGINEERING_DEPARTMENTS
                   : ENGINEERING_DEPARTMENTS.filter((d) => d.name === reportActiveDeptTab);
 
-                const todayStr = (() => {
-                  const now = new Date();
-                  const dd = String(now.getDate()).padStart(2, '0');
-                  const mm = String(now.getMonth() + 1).padStart(2, '0');
-                  const yyyy = now.getFullYear();
-                  return `${dd}-${mm}-${yyyy}`;
-                })();
-
                 const getDeptLabel = (name: string, code: string) => {
                   if (code === 'AD' || name.includes('Artificial Intelligence')) return 'AI & DS';
                   return code || name;
@@ -2198,68 +2196,63 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     return (
                       <div
                         key={`${dept.code}-${yr}`}
-                        className={`bg-black text-white p-7 sm:p-12 rounded-3xl border border-white/15 shadow-2xl font-sans print-card print-break-inside-avoid ${
+                        style={{ fontFamily: '"Times New Roman", Times, serif' }}
+                        className={`bg-white text-black p-8 sm:p-12 shadow-2xl font-serif print-card print-break-inside-avoid border border-slate-300 sm:rounded-lg max-w-4xl mx-auto ${
                           !isLastCard ? 'print-page-break' : ''
                         }`}
                       >
                         {/* Centered Heading */}
-                        <div className="text-center space-y-1">
-                          <h2 className="text-xl sm:text-2xl font-bold tracking-wider uppercase text-white">
+                        <div className="text-center space-y-1.5 mb-6">
+                          <h2 className="text-2xl sm:text-[26px] font-bold tracking-tight uppercase text-black">
                             STUDENT REGISTRATION REPORT
                           </h2>
-                          <p className="text-xs sm:text-sm text-slate-300 font-normal">
-                            Transport Management System (TMS)
+                          <p className="text-sm sm:text-base text-black font-normal">
+                            Training Management System (TMS)
                           </p>
-                          <p className="text-xs sm:text-sm text-slate-200 font-semibold">
+                          <p className="text-sm sm:text-base text-black font-semibold">
                             Nadar Saraswathi College of Engineering and Technology
                           </p>
                         </div>
 
-                        {/* Divider */}
-                        <div className="border-t border-white/20 my-6 sm:my-8" />
-
-                        {/* Metadata 2x2 Grid */}
-                        <div className="grid grid-cols-2 gap-y-6 gap-x-8 text-sm">
-                          <div>
-                            <p className="text-xs text-slate-400 mb-1">Department</p>
-                            <p className="text-base sm:text-lg font-bold text-white tracking-wide">
-                              {getDeptLabel(dept.name, dept.code)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-slate-400 mb-1">Year</p>
-                            <p className="text-base sm:text-lg font-bold text-white tracking-wide">
-                              {toRoman(yr)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-slate-400 mb-1">Report Date</p>
-                            <p className="text-base sm:text-lg font-bold text-white tracking-wide">
-                              {todayStr}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-slate-400 mb-1">Total Registered</p>
-                            <p className="text-base sm:text-lg font-bold text-white tracking-wide">
-                              {batchStudents.length} Students
-                            </p>
+                        {/* Metadata Box with black border */}
+                        <div className="border border-black p-3.5 sm:p-4 mb-6 text-sm sm:text-base text-black">
+                          <div className="flex flex-col sm:flex-row justify-between gap-y-2">
+                            <div className="space-y-2">
+                              <div className="flex items-center">
+                                <span className="font-bold inline-block w-36">Department</span>
+                                <span className="font-bold mr-3">:</span>
+                                <span className="font-medium">{getDeptLabel(dept.name, dept.code)}</span>
+                              </div>
+                              <div className="flex items-center">
+                                <span className="font-bold inline-block w-36">Total Registered</span>
+                                <span className="font-bold mr-3">:</span>
+                                <span className="font-medium">{batchStudents.length} Students</span>
+                              </div>
+                            </div>
+                            <div className="space-y-2 sm:pr-8">
+                              <div className="flex items-center">
+                                <span className="font-bold inline-block w-20">Year</span>
+                                <span className="font-bold mr-3">:</span>
+                                <span className="font-medium">{toRoman(yr)}</span>
+                              </div>
+                            </div>
                           </div>
                         </div>
 
-                        {/* Student Table */}
-                        <div className="mt-8 overflow-x-auto">
-                          <table className="w-full text-left border-collapse text-sm">
+                        {/* Student Table with black grid borders */}
+                        <div className="overflow-x-auto">
+                          <table className="official-report-table w-full text-center border-collapse border border-black text-sm sm:text-base">
                             <thead>
-                              <tr className="border-b border-white/20 text-white font-bold text-sm">
-                                <th className="py-3 px-2 w-20">S.No</th>
-                                <th className="py-3 px-6 min-w-[200px]">Register Number</th>
-                                <th className="py-3 px-6 min-w-[240px]">Student Name</th>
+                              <tr className="border-b border-black text-black font-bold">
+                                <th className="py-2.5 px-3 w-20 sm:w-24 text-center border border-black">S.No</th>
+                                <th className="py-2.5 px-6 min-w-[200px] text-center border border-black">Register Number</th>
+                                <th className="py-2.5 px-6 min-w-[240px] text-center border border-black">Student Name</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/10 font-normal">
+                            <tbody>
                               {batchStudents.length === 0 ? (
                                 <tr>
-                                  <td colSpan={3} className="py-8 text-center text-slate-500 italic">
+                                  <td colSpan={3} className="py-8 text-center text-slate-500 italic border border-black">
                                     No registered students found for this year.
                                   </td>
                                 </tr>
@@ -2267,13 +2260,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 batchStudents.map((student, idx) => (
                                   <tr
                                     key={student.id || student.identifier}
-                                    className="hover:bg-white/5 transition-colors"
+                                    className="border-b border-black text-black"
                                   >
-                                    <td className="py-3.5 px-2 text-slate-300 font-mono">{idx + 1}</td>
-                                    <td className="py-3.5 px-6 text-white font-mono font-medium tracking-wide">
+                                    <td className="py-2.5 px-3 text-center border border-black font-medium">
+                                      {idx + 1}
+                                    </td>
+                                    <td className="py-2.5 px-6 text-center border border-black font-medium tracking-wide">
                                       {student.identifier}
                                     </td>
-                                    <td className="py-3.5 px-6 text-white uppercase font-bold tracking-wide">
+                                    <td className="py-2.5 px-6 text-center border border-black uppercase font-medium tracking-wide">
                                       {student.studentName}
                                     </td>
                                   </tr>
@@ -2281,6 +2276,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               )}
                             </tbody>
                           </table>
+                        </div>
+
+                        {/* Bottom-Right Footer: Total Registered */}
+                        <div className="mt-4 text-right text-sm sm:text-base font-bold text-black">
+                          <span>Total Registered</span>
+                          <span className="mx-2">:</span>
+                          <span>{batchStudents.length} Students</span>
                         </div>
                       </div>
                     );
